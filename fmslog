@@ -8,6 +8,7 @@ Purpose: Display FileMaker Server logs, change logging options, and get resource
 """
 
 import argparse
+import base64
 import curses
 import datetime
 import glob
@@ -23,7 +24,10 @@ import pprint
 import pwd
 import re
 import shutil
-import socket, subprocess, socket, sys
+import socket
+import subprocess
+import socket
+import sys
 import tempfile, textwrap, threading, time, ssl, urllib.request
 from enum import Enum
 from contextlib import ExitStack
@@ -694,75 +698,6 @@ def check_endpoint_status (name: str, host: str, endpoint: str, expected_status:
 	return result_flag
 
 #
-#	c h e c k _ w e b d i r e c t _ s t a t u s
-#
-
-def check_webdirect_status(host: str, port=443, useSSL=True) -> bool:
-	"""
-	Check WebDirect component status from /fmi/mwpem/info endpoint.
-	Prints whether cwpc and jwpc are running and if autostart is enabled.
-	"""
-	result_flag = False
-	print(f'Checking Port {port}, WebDirect - CWPC/JWPC: ', end='', flush=True)
-	
-	if useSSL:
-		endpoint = '/fmi/mwpew/wpe/info'
-		conn = http.client.HTTPSConnection(host, port, context=ssl._create_unverified_context(), timeout=4)
-	else:
-		endpoint = '/fmswpew/wpe/info'
-		conn = http.client.HTTPConnection(host, port, timeout=4)
-	
-	try:
-		conn.request('GET', endpoint)
-		response = conn.getresponse()
-		
-		if response.status == 200:
-			body = response.read().decode('utf-8')
-			try:
-				data = json.loads(body)
-				
-				if data.get('result') == 0:
-					print('Responding')
-					result_flag = True
-					
-					# Check cwpc status
-					if 'cwpc' in data:
-						cwpc = data['cwpc']
-						running_status = 'Running' if cwpc.get('running') else 'Not Running'
-						autostart_status = 'ON' if cwpc.get('autoStart') else 'OFF'
-						print(f'  cwpc: {running_status}, AutoStart: {autostart_status}')
-					else:
-						print('  cwpc: Status unavailable')
-					
-					# Check jwpc status
-					if 'jwpc' in data:
-						jwpc = data['jwpc']
-						running_status = 'Running' if jwpc.get('running') else 'Not Running'
-						autostart_status = 'ON' if jwpc.get('autoStart') else 'OFF'
-						print(f'  jwpc: {running_status}, AutoStart: {autostart_status}')
-					else:
-						print('  jwpc: Status unavailable')
-				else:
-					print_error(f'Error result: {data.get("result")}')
-			except json.JSONDecodeError as e:
-				print_error(f'Failed to parse JSON response: {e}')
-		else:
-			if response.reason:
-				print_error(response.reason)
-			else:
-				print_error('Error, connection failed')
-	except http.client.HTTPException as e:
-		print_error(str(e))
-	except ConnectionRefusedError as e:
-		print_error(str(e))
-	except Exception as e:
-		print_error(str(e))
-	finally:
-		conn.close()
-	
-	return result_flag
-
-#
 #	c h e c k _ t c p _ s t a t u s
 #
 
@@ -891,6 +826,75 @@ def check_file_validity (path: str):
 		raise FileCheckError (f"'{path}' is not readable")
 	if os.path.isdir(path):
 		raise FileCheckError (f"'{path}' is a directory")
+
+#
+#	c h e c k _ w e b d i r e c t _ s t a t u s
+#
+
+def check_webdirect_status(host: str, port=443, useSSL=True) -> bool:
+	"""
+	Check WebDirect component status from /fmi/mwpem/info endpoint.
+	Prints whether cwpc and jwpc are running and if autostart is enabled.
+	"""
+	result_flag = False
+	print(f'Checking Port {port}, WebDirect - CWPC/JWPC: ', end='', flush=True)
+	
+	if useSSL:
+		endpoint = '/fmi/mwpew/wpe/info'
+		conn = http.client.HTTPSConnection(host, port, context=ssl._create_unverified_context(), timeout=4)
+	else:
+		endpoint = '/fmswpew/wpe/info'
+		conn = http.client.HTTPConnection(host, port, timeout=4)
+	
+	try:
+		conn.request('GET', endpoint)
+		response = conn.getresponse()
+		
+		if response.status == 200:
+			body = response.read().decode('utf-8')
+			try:
+				data = json.loads(body)
+				
+				if data.get('result') == 0:
+					print('Responding')
+					result_flag = True
+					
+					# Check cwpc status
+					if 'cwpc' in data:
+						cwpc = data['cwpc']
+						running_status = 'Running' if cwpc.get('running') else 'Not Running'
+						autostart_status = 'ON' if cwpc.get('autoStart') else 'OFF'
+						print(f'  cwpc: {running_status}, AutoStart: {autostart_status}')
+					else:
+						print('  cwpc: Status unavailable')
+					
+					# Check jwpc status
+					if 'jwpc' in data:
+						jwpc = data['jwpc']
+						running_status = 'Running' if jwpc.get('running') else 'Not Running'
+						autostart_status = 'ON' if jwpc.get('autoStart') else 'OFF'
+						print(f'  jwpc: {running_status}, AutoStart: {autostart_status}')
+					else:
+						print('  jwpc: Status unavailable')
+				else:
+					print_error(f'Error result: {data.get("result")}')
+			except json.JSONDecodeError as e:
+				print_error(f'Failed to parse JSON response: {e}')
+		else:
+			if response.reason:
+				print_error(response.reason)
+			else:
+				print_error('Error, connection failed')
+	except http.client.HTTPException as e:
+		print_error(str(e))
+	except ConnectionRefusedError as e:
+		print_error(str(e))
+	except Exception as e:
+		print_error(str(e))
+	finally:
+		conn.close()
+	
+	return result_flag
 
 #
 #	c l a r i s _ c o n f i g _ r e m o v e
@@ -1145,6 +1149,200 @@ class FileCheckError(Exception):
 		self.message = msg
 	def __str__(self):
 		return self.message
+
+#
+#	c l a s s  F i l e M a k e r A d m i n A P I
+#
+
+class FileMakerAdminAPI:
+	"""Client for FileMaker Server Admin API"""
+
+	def __init__(self, host='localhost', username='admin', password='admin'):
+		"""
+		Initialize the FileMaker Admin API client.        
+			host: FileMaker Server hostname (default: 'localhost')
+			username: Admin username (default: 'admin')
+			password: Admin password (default: 'admin')
+		"""
+		self.host = host
+		self.username = username
+		self.password = password
+		self.token = None
+		self.base_url = f'https://{host}/fmi/admin/api/v2'
+		
+		# Create SSL context that doesn't verify certificates (for localhost testing)
+		self.ssl_context = ssl.create_default_context()
+		self.ssl_context.check_hostname = False
+		self.ssl_context.verify_mode = ssl.CERT_NONE
+
+	def _make_request(self, endpoint, method='GET', data=None):
+		"""
+		Make an HTTP request to the FileMaker Admin API.
+			endpoint: API endpoint path
+			method: HTTP method (GET, POST, DELETE, etc.)
+			data: Request body data (dict)
+			
+		Returns:
+			Parsed JSON response
+		"""
+		url = f'{self.base_url}{endpoint}'
+		
+		# Prepare headers
+		headers = {
+			'Content-Type': 'application/json'
+		}
+		
+		# Add token if we have one
+		if self.token:
+			headers['Authorization'] = f'Bearer {self.token}'
+		
+		# Prepare request data
+		request_data = None
+		if data:
+			request_data = json.dumps(data).encode('utf-8')
+		
+		# Create request
+		request = urllib.request.Request(
+			url,
+			data=request_data,
+			headers=headers,
+			method=method
+		)
+        
+		try:
+			# Make request with SSL context
+			response = urllib.request.urlopen(request, context=self.ssl_context)
+			response_data = response.read().decode('utf-8')
+			
+			if response_data:
+				return json.loads(response_data)
+			return None
+			
+		except urllib.error.HTTPError as e:
+			error_body = e.read().decode('utf-8')
+			print(f"HTTP Error {e.code}: {e.reason}")
+			print(f"Response: {error_body}")
+			raise
+		except urllib.error.URLError as e:
+			print(f"URL Error: {e.reason}")
+			raise
+
+	def authenticate(self) -> str:
+		"""
+		Authenticate to the FileMaker Server and obtain an access token.
+		Returns authentication token, or None on failure.
+		"""
+
+		# Create credentials string
+		credentials = f"{self.username}:{self.password}"
+		encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
+
+		# Create request with basic auth
+		url = f'{self.base_url}/user/auth'
+		headers = {
+			'Content-Type': 'application/json',
+			'Authorization': f'Basic {encoded_credentials}'
+		}
+
+		request = urllib.request.Request(url, headers=headers, method='POST')
+
+		try:
+			response = urllib.request.urlopen(request, context=self.ssl_context, timeout=5)
+			data = json.loads(response.read().decode('utf-8'))
+
+			self.token = data['response']['token']
+			return self.token
+
+		except urllib.error.HTTPError as e:
+			error_body = e.read().decode('utf-8')
+			print(f"Authentication failed: HTTP {e.code} - {e.reason}")
+			print(f"Response: {error_body}")
+			raise
+
+    
+	def get_databases(self):
+		"""
+		Get list of databases hosted on the server.
+		
+		Returns:
+			dict: Response containing database information
+		"""
+		response = self._make_request('/databases')
+		return response ['response']
+	
+	def count_databases(self):
+		"""
+		Count the number of databases on the server.
+		
+		Returns:
+			int: Number of databases
+		"""
+		response = self.get_databases()
+		if response and 'databases' in response:
+			count = len(response['databases'])
+			return count
+		return 0
+	
+	def get_clients(self):
+		"""
+		Get list of clients connected to the server.
+		
+		Returns:
+			dict: Response containing client information
+		"""
+		response = self._make_request('/clients')
+		return response ['response']
+	
+	def count_clients(self):
+		"""
+		Count the number of connected clients.
+		
+		Returns:
+			int: Number of clients
+		"""
+		response = self.get_clients()
+		if response and 'clients' in response:
+			count = len(response['clients'])
+			return count
+		return 0
+	
+	def get_schedules(self):
+		"""
+		Get list of schedules configured on the server.
+		
+		Returns:
+			dict: Response containing schedule information
+		"""
+		response = self._make_request('/schedules')
+		return response['response']['schedules']
+	
+	def count_schedules(self) -> int:
+		"""
+		Fetch and count the number of FMS schedules.
+		
+		Returns:
+			int: Number of schedules
+		"""
+		schedules = self.get_schedules()
+		if schedules:
+			count = len(schedules)
+			return count
+		return 0
+	
+	def invalidate_token(self):
+		"""
+		Invalidate the current authentication token (logout).
+		"""
+		if not self.token:
+			return
+		
+		try:
+			self._make_request('/user/auth/' + self.token, method='DELETE')
+			self.token = None
+		except Exception as e:
+			print(f"Error invalidating token: {e}")
+			self.token = None
+
 
 #
 #	f i n d _ f i r s t _ t i m e s t a m p
@@ -1732,6 +1930,7 @@ def init_parser() -> argparse.ArgumentParser:
 	parser.add_argument('-h', '--head', action='store_true', help='display the first lines of log files')
 	parser.add_argument('-H', '--headers-off', dest='headers_off', action='store_true', help='turn off headers for all logs')
 	parser.add_argument('--help', action='help', help='display command details')
+	parser.add_argument('--host-info', action='store_true', help='display host details using the Admin API')
 	parser.add_argument('-i', '--ignore-case', action='store_true', help='ignore case with filter')
 	parser.add_argument('-L', '--list', action='store_true', help='list all log files, including size, date created & modified, sorted by modification time')
 	parser.add_argument('-m', '--merge', action='store_true', help='combine output of two or more logs based on the message timestamps')
@@ -2293,6 +2492,47 @@ def print_fms_cache_info():
 	cache_size,file_count,hl_size = get_folder_stats (cache_path)
 
 	print (f'{path_label:24}  {file_count:11,}  {cache_size:16,}                    {cache_path}')
+
+#
+#	p r i n t _ h o s t _ i n f o
+#
+
+def print_host_info():
+	"""
+	Using the Admin API, gather and display host information.
+	"""
+
+	# Create API client instance
+	api = FileMakerAdminAPI(
+		host='localhost',
+		username=USER,
+		password=PASSWORD
+	)
+	
+	try:
+		# Authenticate to the server
+		api.authenticate()
+		
+		# Get counts
+		num_databases = api.count_databases()
+		num_clients = api.count_clients()
+		num_schedules = api.count_schedules()
+		
+		# Print summary
+		print()
+		print('HOSTING INFORMATION')
+		print(f'Databases: {num_databases}')
+		print(f'Clients: {num_clients}')
+		print(f'Schedules: {num_schedules}')
+		print()
+		
+	except Exception as e:
+		print(f"An error occurred: {e}")
+		
+	finally:
+		# Always invalidate the token when done
+		api.invalidate_token()
+
 
 #
 #	p r i n t _ l o g
@@ -3175,6 +3415,10 @@ def handle_named_options (args) -> bool:
 
 	if args.dir:
 		print_log_dir (args.dir[0])
+		ignore_positionals = True
+
+	if args.host_info:
+		print_host_info()
 		ignore_positionals = True
 
 	if args.ignore_case:
