@@ -50,7 +50,7 @@ EXAMPLES OF UNIMPLEMENTED USAGE
 Reset repo:  git fetch origin main; git reset --hard origin/main
 """
 
-VERSION = "0.38 - 2026-01-26"
+VERSION = "0.39 - 2026-01-31"
 
 #
 #	g e t _ f m s _ v e r s i o n
@@ -1972,7 +1972,7 @@ def init_parser() -> argparse.ArgumentParser:
 	parser.add_argument('-h', '--head', action='store_true', help='display the first lines of log files')
 	parser.add_argument('-H', '--headers-off', dest='headers_off', action='store_true', help='turn off headers for all logs')
 	parser.add_argument('--help', action='help', help='display command details')
-	parser.add_argument('--host-info', action='store_true', help='display host details using the Admin API')
+	parser.add_argument('--host-info', action='store_true', help='display host details from the fmsadmin CLI and the Admin API')
 	parser.add_argument('-i', '--ignore-case', action='store_true', help='ignore case with filter')
 	parser.add_argument('-L', '--list', action='store_true', help='list all log files, including size, date created & modified, sorted by modification time')
 	parser.add_argument('-m', '--merge', action='store_true', help='combine output of two or more logs based on the message timestamps')
@@ -2569,8 +2569,8 @@ def print_host_info():
 		print (f'requireSecureDB = {secure_db_required}')
 
 		general_config = api.get_server_general_settings()
-		for key, value in general_config.items():
-			print (f'{key} = {value}')
+		for setting, value in general_config.items():
+			print (f'{setting} = {value}')
 		print ()
 
 		print ('LOGGING CONFIG (Admin API)')
