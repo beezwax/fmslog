@@ -77,15 +77,16 @@ options:
   -D, --data                list directories being used for databases, external container data, documents, and temp files
   -e, --edit                open the log in a text editor; first try $EDITOR, then GUI editor (macOS), then nano
   -f, --filter FILTER       only return lines matching regex expression FILTER
-  --dir LOG					print the directory path of the named log
+  --dir LOG                 print the directory path of the named log
   -h, --head                display the start of the specified log files instead of its tail
   --help                    display command details
   -H, --headers-off         turn off headers for all logs
-  -i, --ignore-case			make filter's regex case insensitive
+  --host-info               extended list server configuration settings; requires admin console credentials (-u and -p)
+  -i, --ignore-case         make filter's regex case insensitive
   -L, --list                list all log files and crash reports, including size, date created & modified, sorted by modification time
   -n, --number RANGE        quantity of lines to print
   -N, --network             network usage info
-  -P, --process-info		metrics for FMS processes
+  -P, --process-info        metrics for FMS processes
   -S, --set SET             change log configuration options
   --start-fms               start the FileMaker Server service
   --stop-fms                stop the FileMaker Server service
