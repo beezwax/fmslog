@@ -1329,6 +1329,48 @@ class FileMakerAdminAPI:
 			return count
 		return 0
 	
+	def get_script_logs(self) -> dict:
+		"""
+		Get list of script logs and their state (eg, enabled = True).
+		"""
+		response = self._make_request('/server/scripterrorslog')
+		return response['response']
+
+	def get_server_general_settings(self) -> dict:
+		"""
+		Get general server settings, similar to `fmsadmin get serverconfig`.
+		"""
+		response = self._make_request('/server/config/general')
+		return response['response']
+
+	def get_server_parallel_backup_setting(self) -> str:
+		"""
+		Get server parallel backup setting (whether parallel backups are enabled).
+		"""
+		response = self._make_request('/server/config/parallelbackup')
+		return response['response']['parallelBackupEnabled']
+
+	def get_server_current_folder_settings(self) -> str:
+		"""
+		Get target directories for for databases and default backup paths.
+		"""
+		response = self._make_request('/server/currentfoldersettings')
+		return response['response']
+
+	def get_server_security_setting(self) -> str:
+		"""
+		Get server security setting (whether unsafe databases should be hosted).
+		"""
+		response = self._make_request('/server/config/security')
+		return response['response']['requireSecureDB']
+	
+	def get_server_metadata(self) -> dict:
+		"""
+		Get misc. server information.
+		"""
+		response = self._make_request('/server/metadata')
+		return response['response']
+
 	def invalidate_token(self):
 		"""
 		Invalidate the current authentication token (logout).
@@ -2174,37 +2216,6 @@ def pick_from_list (options: list, prompt: str) -> int:
 
 	return int(user_input) - 1
 
-
-#
-#	p r o c e s s _ i n f o
-#
-
-def process_info ():
-	"""
-	Print the FMS related processes and their stats.
-	"""
-
-	print ()
-
-	if platform.system() == 'Darwin':
-		ps_result = subprocess.run(
-			['ps', '-u', 'fmserver', '-o', 'pid,%cpu,rss,stime,time,majflt,stat,comm'],
-			capture_output=True,
-			text=True,
-			check=False).stdout.split('\n')
-	elif platform.system() == 'Linux':
-		ps_result = subprocess.run(
-			['ps', '-u', 'fmserver', '-o', 'pid,%cpu,rss,stime,times,maj_flt,stat,comm'],
-			capture_output=True,
-			text=True,
-			check=False).stdout.split('\n')
-	else:
-		ps_result = ['not implemented'] # Windows
-
-	for proc in ps_result:
-		print (proc)
-
-
 #
 #	p a r s e _ b e g i n _ t i m e
 #
@@ -2520,12 +2531,55 @@ def print_host_info():
 		
 		# Print summary
 		print()
-		print('HOSTING INFORMATION')
-		print(f'Databases: {num_databases}')
-		print(f'Clients: {num_clients}')
-		print(f'Schedules: {num_schedules}')
+		print('HOST STATUS')
+		print(f'Databases = {num_databases}')
+		print(f'Clients = {num_clients}')
+		print(f'Schedules = {num_schedules}')
 		print()
+
+		print ('FOLDER SETTINGS (Admin API)')
+		folder_paths = api.get_server_current_folder_settings()
+		for key, value in folder_paths.items():
+			print (f'{key} = {value}')
+		print ()
+
+		print ('SERVER CONFIG (fmsadmin CLI)')
+
+		service_proc = subprocess.run(
+				['fmsadmin', 'get', 'serverconfig', '-u', USER, '-p', PASSWORD],
+				capture_output=True,
+				text=True,
+				check=False)
+		print (service_proc.stdout)
+
+		print ('CWP CONFIG (fmsadmin CLI)')
+		service_proc = subprocess.run(
+				['fmsadmin', 'get', 'cwpconfig', '-u', USER, '-p', PASSWORD],
+				capture_output=True,
+				text=True,
+				check=False)
+		print (service_proc.stdout)
+
+		print ('SERVER CONFIG (Admin API)')
+
+		parallel_backups = api.get_server_parallel_backup_setting()
+		print (f'parallelBackupEnabled = {parallel_backups}')
 		
+		secure_db_required = api.get_server_security_setting()
+		print (f'requireSecureDB = {secure_db_required}')
+
+		general_config = api.get_server_general_settings()
+		for key, value in general_config.items():
+			print (f'{key} = {value}')
+		print ()
+
+		print ('LOGGING CONFIG (Admin API)')
+		logs = api.get_script_logs()
+		for log_name,log_state in logs.items():
+			#enabled_str = 'true' if log_state else 'false'
+			print (f"{log_name} = {log_state}")
+		print ()
+
 	except Exception as e:
 		print(f"An error occurred: {e}")
 		
@@ -3025,6 +3079,35 @@ def print_version():
 
 	print ('Vaadin:', get_vaadin_version())
 	print ()
+
+#
+#	p r o c e s s _ i n f o
+#
+
+def process_info ():
+	"""
+	Print the FMS related processes and their stats.
+	"""
+
+	print ()
+
+	if platform.system() == 'Darwin':
+		ps_result = subprocess.run(
+			['ps', '-u', 'fmserver', '-o', 'pid,%cpu,rss,stime,time,majflt,stat,comm'],
+			capture_output=True,
+			text=True,
+			check=False).stdout.split('\n')
+	elif platform.system() == 'Linux':
+		ps_result = subprocess.run(
+			['ps', '-u', 'fmserver', '-o', 'pid,%cpu,rss,stime,times,maj_flt,stat,comm'],
+			capture_output=True,
+			text=True,
+			check=False).stdout.split('\n')
+	else:
+		ps_result = ['not implemented'] # Windows
+
+	for proc in ps_result:
+		print (proc)
 
 #
 #	r e a d _ t a i l
