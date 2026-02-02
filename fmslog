@@ -1258,17 +1258,6 @@ class FileMakerAdminAPI:
 			print(f"Authentication failed: HTTP {e.code} - {e.reason}")
 			print(f"Response: {error_body}")
 			raise
-
-    
-	def get_databases(self):
-		"""
-		Get list of databases hosted on the server.
-		
-		Returns:
-			dict: Response containing database information
-		"""
-		response = self._make_request('/databases')
-		return response ['response']
 	
 	def count_databases(self):
 		"""
@@ -1306,6 +1295,37 @@ class FileMakerAdminAPI:
 			return count
 		return 0
 	
+	def get_databases(self):
+		"""
+		Get list of databases hosted on the server.
+		
+		Returns:
+			dict: Response containing database information
+		"""
+		response = self._make_request('/databases')
+		return response ['response']
+
+	def get_dapi_plugin_config(self) -> dict:
+		"""
+		Get DAPI (Data API) plugin configuration information.
+		"""
+		response = self._make_request('/plugins/DAPIPluginConfig')
+		return response['response']['config']
+
+	def get_dbs_plugin_config(self) -> dict:
+		"""
+		Get database plugin configuration information.
+		"""
+		response = self._make_request('/plugins/DbsPluginConfig')
+		return response['response']['config']
+
+	def get_wpe_plugin_config(self) -> dict:
+		"""
+		Get database plugin configuration information.
+		"""
+		response = self._make_request('/plugins/WpePluginConfig')
+		return response['response']['config']
+
 	def get_schedules(self):
 		"""
 		Get list of schedules configured on the server.
@@ -2573,6 +2593,15 @@ def print_host_info():
 			print (f'{setting} = {value}')
 		print ()
 
+		print ('PLUG-IN CONFIG (Admin API)')
+		dbs_plugin_config = api.get_dbs_plugin_config()
+		print ('Database Engine Plug-Ins: enabled = {}, allowInstall = {}'.format (dbs_plugin_config['usePlugins'], dbs_plugin_config['allowInstallPlugin']))
+		dapi_plugin_config = api.get_dapi_plugin_config()
+		print ('DAPI Plug-Ins: enabled = {}, allowInstall = {}'.format (dapi_plugin_config['DAPIEnablePlugins'], dapi_plugin_config['DAPIAllowInstallPlugins']))
+		web_plugin_config = api.get_wpe_plugin_config()
+		print ('Web Publishing Plug-Ins: enabled = {}, allowInstall = {}'.format (web_plugin_config['iwpEnablePlugins'], web_plugin_config['iwpAllowInstallPlugins']))
+		print ()
+	
 		print ('LOGGING CONFIG (Admin API)')
 		logs = api.get_script_logs()
 		for log_name,log_state in logs.items():
