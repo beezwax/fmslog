@@ -22,13 +22,15 @@ import pathlib
 import platform
 import pprint
 import pwd
+import random
 import re
 import shutil
 import socket
+import string
 import subprocess
-import socket
 import sys
-import tempfile, textwrap, threading, time, ssl, urllib.request
+import tempfile
+import textwrap, threading, time, ssl, urllib.request
 from enum import Enum
 from contextlib import ExitStack
 
@@ -50,7 +52,7 @@ EXAMPLES OF UNIMPLEMENTED USAGE
 Reset repo:  git fetch origin main; git reset --hard origin/main
 """
 
-VERSION = "0.39 - 2026-01-31"
+VERSION = "0.41 - 2026-02-03"
 
 #
 #	g e t _ f m s _ v e r s i o n
@@ -595,7 +597,6 @@ class TerminalColors:
 	UNDERLINE = '\033[4m'
 	END = '\033[0m'
 
-
 #
 #	calc_row_metrics
 #
@@ -698,30 +699,6 @@ def check_endpoint_status (name: str, host: str, endpoint: str, expected_status:
 	return result_flag
 
 #
-#	c h e c k _ t c p _ s t a t u s
-#
-
-def check_tcp_status (name: str, host: str, port):
-	"""
-	Print the result of testing if TCP connection can be opened to the given host's port.
-	"""
-	result_flag = False
-	print ('Checking', name, end='')
-	
-	try:
-		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		sock.settimeout(4)	# 4 seconds
-		result = sock.connect_ex((host,port))
-		if result == 0:
-			print (': Responding')
-		else:
-			print_error (f': Error {result}, Could not open port {port}')
-	except socket.gaierror:
-		print_error (f': Could not resolve host "{host}"')
-	finally:
-		sock.close()
-
-#
 #	c h e c k _ c o n n e c t i v i t y
 #
 
@@ -782,6 +759,11 @@ def check_connectivity():
 	check_endpoint_status ('Port 3000, Data API - Internal: ', intern_addr, dapiEndpoint, 200, port=3000)
 	check_endpoint_status ('Port 443, Data API - External: ', extern_addr, dapiEndpoint, 200, useSSL=True)
 	
+	# IWP/WebDirect Notification Service
+	# What's the endpoint used for this?
+	check_tcp_status ('Port 8998, IWP Notification Service - Internal: ', intern_addr, port=8998)
+	check_tcp_status ('Port 8998, IWP Notification Service - External: ', extern_addr, 8998)
+
 	# JDBC
 	check_tcp_status ('Port 2399, JDBC - Internal: ', intern_addr, 2399)
 	check_tcp_status ('Port 2399, JDBC - External: ', extern_addr, 2399)
@@ -810,7 +792,6 @@ def check_connectivity():
 	# alternate: curl -vk -X DELETE https://127.0.0.1/fmi/admin/api/v2/user/auth/abcdef0123456789
 	print ()
 
-
 #
 #	c h e c k _ f i l e _ v a l i d i t y
 #
@@ -826,6 +807,52 @@ def check_file_validity (path: str):
 		raise FileCheckError (f"'{path}' is not readable")
 	if os.path.isdir(path):
 		raise FileCheckError (f"'{path}' is a directory")
+
+#
+#	t e s t _ o d a t a _ f u n c t i o n s
+#
+
+def test_odata_functions():
+
+	odata = FileMakerODataAPI ()
+	
+	start_time = datetime.datetime.now()
+	# This also tests the ability to run a script.
+	print ('Deleting any pre-exising records...', flush=true, end='')
+	odata.delete_all_records('OData')
+	print ('done')
+	print ('Creating new records...', flush=true, end='')
+	odata.create_test_records('OData', 500)
+	print ('Selecting a set of records...', flush=true, end='')
+	odata.select_records('OData','a')
+	print ('done')
+	print ('Updating a set of records...', flush=true, end='')
+	odata.update_records('OData','a','B')
+	print ('done')
+
+#
+#	c h e c k _ t c p _ s t a t u s
+#
+
+def check_tcp_status (name: str, host: str, port):
+	"""
+	Print the result of testing if TCP connection can be opened to the given host's port.
+	"""
+	result_flag = False
+	print ('Checking', name, end='')
+	
+	try:
+		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		sock.settimeout(4)	# 4 seconds
+		result = sock.connect_ex((host,port))
+		if result == 0:
+			print (': Responding')
+		else:
+			print_error (f': Error {result}, Could not open port {port}')
+	except socket.gaierror:
+		print_error (f': Could not resolve host "{host}"')
+	finally:
+		sock.close()
 
 #
 #	c h e c k _ w e b d i r e c t _ s t a t u s
@@ -1154,36 +1181,41 @@ class FileCheckError(Exception):
 #	c l a s s  F i l e M a k e r A d m i n A P I
 #
 
-class FileMakerAdminAPI:
+
+class FileMakerODataAPI:
 	"""Client for FileMaker Server Admin API"""
 
-	def __init__(self, host='localhost', username='admin', password='admin'):
+	def __init__(self, host='localhost', database='API_Testing', username='admin', password='apasswd'):
 		"""
 		Initialize the FileMaker Admin API client.        
 			host: FileMaker Server hostname (default: 'localhost')
+			database: Database name (without URL encoding)
 			username: Admin username (default: 'admin')
 			password: Admin password (default: 'admin')
 		"""
 		self.host = host
+		self.database = urllib.parse.quote (database)
 		self.username = username
 		self.password = password
 		self.token = None
-		self.base_url = f'https://{host}/fmi/admin/api/v2'
+		self.base_url = f'https://{host}/fmi/odata/v4/{self.database}'
 		
 		# Create SSL context that doesn't verify certificates (for localhost testing)
 		self.ssl_context = ssl.create_default_context()
 		self.ssl_context.check_hostname = False
 		self.ssl_context.verify_mode = ssl.CERT_NONE
 
-	def _make_request(self, endpoint, method='GET', data=None):
+	def _make_ppp_request(self, endpoint, method='GET', data=None):
 		"""
-		Make an HTTP request to the FileMaker Admin API.
+		Make a Post, Patch, or Put request to FileMaker's OData interface.
 			endpoint: API endpoint path
-			method: HTTP method (GET, POST, DELETE, etc.)
+			method: HTTP method ('POST', 'PATCH', 'PUT')
 			data: Request body data (dict)
 			
 		Returns:
 			Parsed JSON response
+
+		OData template: https://host/fmi/odata/version/database-name/table-name
 		"""
 		url = f'{self.base_url}{endpoint}'
 		
@@ -1191,10 +1223,17 @@ class FileMakerAdminAPI:
 		headers = {
 			'Content-Type': 'application/json'
 		}
-		
-		# Add token if we have one
-		if self.token:
-			headers['Authorization'] = f'Bearer {self.token}'
+	
+		# Create credentials string
+		credentials = f"{self.username}:{self.password}"
+		encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
+
+		# Create request with basic auth
+		url = f'{self.base_url}/{endpoint}'
+		headers = {
+			'Content-Type': 'application/json',
+			'Authorization': f'Basic {encoded_credentials}'
+		}
 		
 		# Prepare request data
 		request_data = None
@@ -1227,183 +1266,131 @@ class FileMakerAdminAPI:
 			print(f"URL Error: {e.reason}")
 			raise
 
-	def authenticate(self) -> str:
-		"""
-		Authenticate to the FileMaker Server and obtain an access token.
-		Returns authentication token, or None on failure.
-		"""
+		return None
 
-		# Create credentials string
-		credentials = f"{self.username}:{self.password}"
-		encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
 
-		# Create request with basic auth
-		url = f'{self.base_url}/user/auth'
-		headers = {
-			'Content-Type': 'application/json',
-			'Authorization': f'Basic {encoded_credentials}'
+	def execute_script(self, script_name: str, parameter: str) -> str:
+		"""
+		Execute a FileMaker script via OData.
+			script_name: Name of the script to execute
+			parameter: Parameter to pass to the FM script
+			
+		Returns:
+			Script result as string
+		OData Template: https://host/fmi/odata/version/database-name/Script.script-name
+		"""
+		endpoint = f'/Script.{urllib.parse.quote(script_name)}'
+		data = {
+			'scriptParameterValue': parameter
 		}
-
-		request = urllib.request.Request(url, headers=headers, method='POST')
-
-		try:
-			response = urllib.request.urlopen(request, context=self.ssl_context, timeout=5)
-			data = json.loads(response.read().decode('utf-8'))
-
-			self.token = data['response']['token']
-			return self.token
-
-		except urllib.error.HTTPError as e:
-			error_body = e.read().decode('utf-8')
-			print(f"Authentication failed: HTTP {e.code} - {e.reason}")
-			print(f"Response: {error_body}")
-			raise
-	
-	def count_databases(self):
-		"""
-		Count the number of databases on the server.
 		
-		Returns:
-			int: Number of databases
-		"""
-		response = self.get_databases()
-		if response and 'databases' in response:
-			count = len(response['databases'])
-			return count
-		return 0
-	
-	def get_clients(self):
-		"""
-		Get list of clients connected to the server.
+		response = self._make_ppp_request(endpoint, method='POST', data=data)
 		
-		Returns:
-			dict: Response containing client information
+		if response and 'scriptResult' in response:
+			return response['scriptResult']
+		return None
+
+	def delete_all_records(self, table: str):
 		"""
-		response = self._make_request('/clients')
+		Delete all records in named table by executing the 'api . delete all records (name)' script.
+		"""
+		self.execute_script('api . delete all records (name)', 'OData')
 		return response ['response']
 	
-	def count_clients(self):
+	def create_record(self, table: str, data: dict) -> str:
 		"""
-		Count the number of connected clients.
-		
+		Create a new record in the OData table.
+			data: Dictionary of field names and values
+			
 		Returns:
-			int: Number of clients
+			Record ID of the created record
+
+		OData template: https://host/fmi/odata/version/database-name/table-name
 		"""
-		response = self.get_clients()
-		if response and 'clients' in response:
-			count = len(response['clients'])
-			return count
-		return 0
-	
-	def get_databases(self):
-		"""
-		Get list of databases hosted on the server.
+		endpoint = '/' + urllib.parse.quote(table)
+		response = self._make_ppp_request(endpoint, method='POST', data=data)
 		
+		if response and 'recordId' in response:
+			return response['recordId']
+		return None
+	
+	def create_test_records(self, table: str, count: int):
+		"""
+		Create multiple test records in the OData table.
+			count: Number of records to create
+		"""
+		for i in range(count):
+			data = {
+				'TextData': random_string(255),
+				'NumberData': random.randint(0, count),
+				'DateData': datetime.datetime.now().date().isoformat()
+			}
+			self.create_record(table, data)
+
+	def select_records(self, table: str, field:str, pattern: str) -> list:
+		"""
+		Select records from the OData table where TextData matches the given pattern.
+			pattern: Substring to match in TextData field
+			
 		Returns:
-			dict: Response containing database information
+			List of matching records
 		"""
-		response = self._make_request('/databases')
-		return response ['response']
-
-	def get_dapi_plugin_config(self) -> dict:
-		"""
-		Get DAPI (Data API) plugin configuration information.
-		"""
-		response = self._make_request('/plugins/DAPIPluginConfig')
-		return response['response']['config']
-
-	def get_dbs_plugin_config(self) -> dict:
-		"""
-		Get database plugin configuration information.
-		"""
-		response = self._make_request('/plugins/DbsPluginConfig')
-		return response['response']['config']
-
-	def get_wpe_plugin_config(self) -> dict:
-		"""
-		Get database plugin configuration information.
-		"""
-		response = self._make_request('/plugins/WpePluginConfig')
-		return response['response']['config']
-
-	def get_schedules(self):
-		"""
-		Get list of schedules configured on the server.
+		endpoint = f'/{urllib.parse.quote(table)}?$filter=contains({field}, \'{pattern}\')'
+		response = self._make_ppp_request(endpoint, method='GET')
 		
+		if response and 'value' in response:
+			return response['value']
+		return []
+
+	def update_record (self, table: str, id: str, field: str, value) -> dict:
+		"""
+		For the given record ID, update a field with a new value.
+			id: Record ID
+			field: Field name to update
+			value: New value for the field
+			
 		Returns:
-			dict: Response containing schedule information
+			status of update operation
+
+		OData template: https://host/fmi/odata/version/database-name/table-name(primary-key-value)
 		"""
-		response = self._make_request('/schedules')
-		return response['response']['schedules']
-	
-	def count_schedules(self) -> int:
-		"""
-		Fetch and count the number of FMS schedules.
+		endpoint = f'/{urllib.parse.quote(self.table)}({id})'
+		record = {field: value}
 		
+		# Send PATCH request to update the record
+		updated_record = self._make_ppp_request(endpoint, method='PATCH', data=record)
+		return updated_record
+
+	def update_test_records (self, table: str, id_list: list, field: str, source_pattern: str, dest_pattern: str) -> str:
+		"""
+		Update records in the OData table where TextData matches the source_pattern,
+		replacing it with dest_pattern in the specified field.
+			id_list: List of record IDs to update
+			field: Field name to update
+			source_pattern: Substring to find in the field
+			dest_pattern: Substring to replace with
+			
 		Returns:
-			int: Number of schedules
+			Number of records updated
 		"""
-		schedules = self.get_schedules()
-		if schedules:
-			count = len(schedules)
-			return count
-		return 0
-	
-	def get_script_logs(self) -> dict:
-		"""
-		Get list of script logs and their state (eg, enabled = True).
-		"""
-		response = self._make_request('/server/scripterrorslog')
-		return response['response']
-
-	def get_server_general_settings(self) -> dict:
-		"""
-		Get general server settings, similar to `fmsadmin get serverconfig`.
-		"""
-		response = self._make_request('/server/config/general')
-		return response['response']
-
-	def get_server_parallel_backup_setting(self) -> str:
-		"""
-		Get server parallel backup setting (whether parallel backups are enabled).
-		"""
-		response = self._make_request('/server/config/parallelbackup')
-		return response['response']['parallelBackupEnabled']
-
-	def get_server_current_folder_settings(self) -> str:
-		"""
-		Get target directories for for databases and default backup paths.
-		"""
-		response = self._make_request('/server/currentfoldersettings')
-		return response['response']
-
-	def get_server_security_setting(self) -> str:
-		"""
-		Get server security setting (whether unsafe databases should be hosted).
-		"""
-		response = self._make_request('/server/config/security')
-		return response['response']['requireSecureDB']
-	
-	def get_server_metadata(self) -> dict:
-		"""
-		Get misc. server information.
-		"""
-		response = self._make_request('/server/metadata')
-		return response['response']
-
-	def invalidate_token(self):
-		"""
-		Invalidate the current authentication token (logout).
-		"""
-		if not self.token:
-			return
+		updated_count = 0
 		
-		try:
-			self._make_request('/user/auth/' + self.token, method='DELETE')
-			self.token = None
-		except Exception as e:
-			print(f"Error invalidating token: {e}")
-			self.token = None
+		for record_id in id_list:
+			# Get the existing record
+			record = self._make_ppp_request(f'/{urllib.parse.quote(table)}({record_id})', method='GET')
+			
+			if record and field in record:
+				# Replace source_pattern with dest_pattern in the specified field
+				original_value = record[field]
+				updated_value = original_value.replace(source_pattern, dest_pattern)
+				
+				if updated_value != original_value:
+					# Update the record with the new value
+					record[field] = updated_value
+					self._make_ppp_request(f'/{urllib.parse.quote(self.database)}({record_id})', method='PATCH', data=record)
+					updated_count += 1
+		
+		return updated_count
 
 
 #
@@ -2175,6 +2162,20 @@ def manage_fms_service (action: str) -> bool:
 	return service_proc.returncode == 0
 
 
+def odata_tests (file_name='API_Testing') -> bool:
+	"""
+	Execute several different OData requests to verify correct behavior.
+	"""
+	
+	# clear previous data
+	# create test records
+	# query test records
+	# update test records
+	# delete test records
+	pass
+
+
+
 #
 #	p r i n t _ s s l _ o p t i o n s_ c r y p t o
 #
@@ -2388,6 +2389,9 @@ def print_data_dirs_info():
 	"""
 	Print the database folder paths extracted from Event.log.
 	"""
+	
+	# TODO: add /opt/FileMaker/FileMaker Server/Web Publishing/publishing-engine/wip/Documents/ 
+
 	RCDIR = 'RC_Data_FMS'
 
 	(default_path, secure_path, additional_path1, additional_path2, remote_container_path1, remote_container_path2) = get_db_directories()
@@ -3074,30 +3078,39 @@ def print_version():
 	# NODE.JS
 	
 	if platform.system() in ['Darwin', 'Linux']:
-		node_version = subprocess.run(
-			[BASE_PATH + '/node/bin/node', '-v'],
-			capture_output=True,
-			text=True,
-			check=False).stdout[1:]
+		try:
+			node_version = subprocess.run(
+				[BASE_PATH + '/node/bin/node', '-v'],
+				capture_output=True,
+				text=True,
+				check=False).stdout[1:]
+		except FileNotFoundError:
+			node_version = '<missing>\n'
 		print ('Node:', node_version, end='')
 	
 	# OPENSSL
 	
 	if platform.system() == 'Darwin':
 		# check FMS' copy, not the OS one.
-		open_ssl_words = subprocess.run(
-			[BASE_PATH + '/Database Server/bin/openssl','version'],
-			capture_output=True,
-			text=True,
-			check=False).stdout.split()
-		print ('OpenSSL:',open_ssl_words[1],open_ssl_words[2])
-	
-	elif platform.system() == 'Linux':
-		open_ssl_words = subprocess.run(
-			['/usr/bin/openssl', 'version'],
+		try:
+			open_ssl_words = subprocess.run(
+				[BASE_PATH + '/Database Server/bin/openssl','version'],
 				capture_output=True,
 				text=True,
 				check=False).stdout.split()
+		except FileNotFoundError:
+			open_ssl_words = ['','<missing>','']
+		print ('OpenSSL:',open_ssl_words[1],open_ssl_words[2])
+
+	elif platform.system() == 'Linux':
+		try:
+			open_ssl_words = subprocess.run(
+				['/usr/bin/openssl', 'version'],
+					capture_output=True,
+					text=True,
+					check=False).stdout.split()
+		except FileNotFoundError:
+			print ('OpenSSL: not found')
 		print ('OpenSSL:',open_ssl_words[1],open_ssl_words[2])
 			
 	if platform.system() == 'Windows':
@@ -3137,6 +3150,14 @@ def process_info ():
 
 	for proc in ps_result:
 		print (proc)
+
+#
+#	r a n d o m _ s t r i n g
+#
+
+def random_string (length: int) -> str:
+	letters = string.ascii_letters + string.digits + ' ';
+	return ''.join(random.choice(letters) for i in range(length));
 
 #
 #	r e a d _ t a i l
