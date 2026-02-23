@@ -128,19 +128,19 @@ optional external container directories.
 
 The total size values for Default and Secure folders does not include the enclosed RC_Data_FMS folders, which are totaled separately.
 
-### --dir
+### --dir LOGNAME
 Print the directory path for the given log name. Could be used in shell command like this:
 `cd "$(fmslog --dir event)"`
 This will change the current directory to the location of the `Event.log` file. The double quotes are needed for macOS because there is a space character in the path.
 
-### -e, --edit
+### -e, --edit LOGNAME
 Opens a log file in an editor. If the standard shell environment variable $EDITOR is set for the user, the file will be opened using that command.
 
 Next, attempt to open using a GUI editor. On macOS, first check that there is a user logged in to the desktop, and if so, open the log file using TextEdit. For Windows, it will open the file using Notepad.
 
 Finally, on Ubuntu and macOS, it will attempt to open the log using the Terminal based nano text editor.
 
-### -f, --filter
+### -f, --filter REGEX
 For any subsequent logs, only display messages matching the given regular expression (regex).
 
 Filtering will happen before any -n/--number limits are applied, or simplification if using --succinct.
@@ -162,7 +162,7 @@ If using the -f/--filter option, this option will cause any pattern searches to 
 List all log names and paths for the current platform. For logs that are present, list their creation and modification timestamps and their size.
 Any FMS crash reports are also listed here.
 
-### -n, --number
+### -n, --number QUANTITY
 Number of log message lines or screens to print. For screens, add 's' as a suffix, e.g. '-n 2s' for two screens. Since some messages may not fit current screen size
 you may want to use the --truncate option to have an exact fit.
 

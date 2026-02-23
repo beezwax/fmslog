@@ -2464,6 +2464,7 @@ def print_data_dirs_info():
 	print ()
 	print_fms_cache_info()
 	print_documents_info()
+	print_documents_web_info()
 	print_fmtmp_info()
 	print ()
 
@@ -2480,6 +2481,22 @@ def print_documents_info():
 		documents_size,file_count,hl_size = get_folder_stats (documents_path)
 	# Any point in displaying if has hard links?
 	print (f'{file_count:11,}  {documents_size:16,}                    {documents_path}')
+
+#
+#	p r i n t _ d o c u m e n t s _ w e b _ i n f o
+#
+
+def print_documents_web_info():
+	"""
+	Display information about FMS's Documents folder used by WPE and DAPI.
+	"""
+
+	documents_path = os.path.join (BASE_PATH, 'Web Publishing','publishing-engine','wip','Documents') 
+	with Spinner ('Web Documents            '):
+		documents_size,file_count,hl_size = get_folder_stats (documents_path)
+	# Any point in displaying if has hard links?
+	print (f'{file_count:11,}  {documents_size:16,}                    {documents_path}')
+
 
 #
 #	p r i n t _ f m t m p _ i n f o
