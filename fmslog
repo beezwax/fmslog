@@ -52,7 +52,7 @@ EXAMPLES OF UNIMPLEMENTED USAGE
 Reset repo:  git fetch origin main; git reset --hard origin/main
 """
 
-VERSION = "0.41 - 2026-02-03"
+VERSION = "0.42 - 2026-02-22"
 
 #
 #	g e t _ f m s _ v e r s i o n
