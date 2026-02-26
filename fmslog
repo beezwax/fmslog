@@ -814,21 +814,24 @@ def check_file_validity (path: str):
 
 def test_odata_functions():
 
-	odata = FileMakerODataAPI ()
-	
-	start_time = datetime.datetime.now()
-	# This also tests the ability to run a script.
-	print ('Deleting any pre-exising records...', flush=true, end='')
-	odata.delete_all_records('OData')
-	print ('done')
-	print ('Creating new records...', flush=true, end='')
-	odata.create_test_records('OData', 500)
-	print ('Selecting a set of records...', flush=true, end='')
-	odata.select_records('OData','a')
-	print ('done')
-	print ('Updating a set of records...', flush=true, end='')
-	odata.update_records('OData','a','B')
-	print ('done')
+	if USER and PASSWORD:
+		odata = FileMakerODataAPI (username=USER, password=PASSWORD)
+		
+		start_time = datetime.datetime.now()
+		# This also tests the ability to run a script.
+		print ('Deleting any pre-exising records...', flush=True, end='')
+		odata.delete_all_records('OData')
+		print ('done')
+		print ('Creating new records...', flush=True, end='')
+		odata.create_test_records('OData', 500)
+		print ('Selecting a set of records...', flush=true, end='')
+		odata.select_records('OData','a')
+		print ('done')
+		print ('Updating a set of records...', flush=true, end='')
+		odata.update_records('OData','a','B')
+		print ('done')
+	else:
+		print ('Error: must specify both user and password for OData test file')
 
 #
 #	c h e c k _ t c p _ s t a t u s
@@ -1294,8 +1297,8 @@ class FileMakerODataAPI:
 		"""
 		Delete all records in named table by executing the 'api . delete all records (name)' script.
 		"""
-		self.execute_script('api . delete all records (name)', 'OData')
-		return response ['response']
+		response = self.execute_script('api_delete_all_records', 'OData')
+		return response
 	
 	def create_record(self, table: str, data: dict) -> str:
 		"""
@@ -1995,12 +1998,12 @@ def init_parser() -> argparse.ArgumentParser:
 	parser.add_argument('--stop-fms', action='store_true', help='stop the FileMaker Server service')
 	parser.add_argument('-t', dest='tail', action='store_true', help='wait for any new messages')
 	parser.add_argument('--tail', dest='tail', type=float, nargs=1, default=[-1.0], help='wait for any new messages, specifying number of seconds to wait for each file')
+	parser.add_argument('--test-odata', action='store_true', help='extended OData API checks; requires API_Testing file')
 	parser.add_argument('--truncate', action='store_true', help='cut off any output if beyond width of screen')
 	parser.add_argument('-u', '--user', help='FMS console or SSH account name')
 	parser.add_argument('-V', '--version', action='store_true', help='version info for fmslog and FMS')
 	# Hack to avoid error if there is only an option specified but no positional argument
 	parser.add_argument('logs', nargs='*', help='log name to display')
-	#parser.add_argument('log2', nargs='?', help='additional log to display')
 
 	parser.epilog = HELP_EPILOGUE
 	
@@ -3059,6 +3062,9 @@ def print_tls_version (host: str, port=443) -> bool:
 	except ConnectionRefusedError:
 		print ('SSL/TLS version: ', end='')
 		print_error (f'Error, could not connect to {host}:{port}')
+	except timeout:
+		print ('SSL/TLS version: ', end='')
+		print_error (f'Error, connection to {host}:{port} timed out')
 	except ssl.SSLError as e:
 		print_error ('  ', str (e))
 	finally:
@@ -3601,6 +3607,10 @@ def handle_named_options (args) -> bool:
 
 	if args.stop_fms:
 		manage_fms_service('stop')
+		ignore_positionals = True
+
+	if args.test_odata:
+		test_odata_functions()
 		ignore_positionals = True
 
 	if args.version:
