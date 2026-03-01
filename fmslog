@@ -2151,7 +2151,7 @@ def manage_fms_service (action: str) -> bool:
 			if not got_sudo_prompt and os.getuid() != 0:
 				print ('Running systemctl with sudo, you may be prompted for password.')
 			service_proc = subprocess.run(
-				['sudo', 'systemctl', action, 'fms.service'],
+				['sudo', 'systemctl', action, 'fmshelper.service'],
 				capture_output=True,
 				text=True,
 				check=False)
