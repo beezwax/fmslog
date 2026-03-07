@@ -52,7 +52,7 @@ EXAMPLES OF UNIMPLEMENTED USAGE
 Reset repo:  git fetch origin main; git reset --hard origin/main
 """
 
-VERSION = "0.42 - 2026-02-22"
+VERSION = "0.43 - 2026-03-05"
 
 #
 #	g e t _ f m s _ v e r s i o n
@@ -824,10 +824,10 @@ def test_odata_functions():
 		print ('done')
 		print ('Creating new records...', flush=True, end='')
 		odata.create_test_records('OData', 500)
-		print ('Selecting a set of records...', flush=true, end='')
-		odata.select_records('OData','a')
+		print ('Selecting a set of records...', flush=True, end='')
+		odata.select_records('OData','TextData','a')
 		print ('done')
-		print ('Updating a set of records...', flush=true, end='')
+		print ('Updating a set of records...', flush=True, end='')
 		odata.update_records('OData','a','B')
 		print ('done')
 	else:
@@ -1221,6 +1221,7 @@ class FileMakerODataAPI:
 		OData template: https://host/fmi/odata/version/database-name/table-name
 		"""
 		url = f'{self.base_url}{endpoint}'
+		print ('url:', url)
 		
 		# Prepare headers
 		headers = {
@@ -1232,7 +1233,6 @@ class FileMakerODataAPI:
 		encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
 
 		# Create request with basic auth
-		url = f'{self.base_url}/{endpoint}'
 		headers = {
 			'Content-Type': 'application/json',
 			'Authorization': f'Basic {encoded_credentials}'
@@ -1287,6 +1287,9 @@ class FileMakerODataAPI:
 			'scriptParameterValue': parameter
 		}
 		
+		print()
+		print (endpoint, 'POST', data)
+
 		response = self._make_ppp_request(endpoint, method='POST', data=data)
 		
 		if response and 'scriptResult' in response:
@@ -1330,7 +1333,7 @@ class FileMakerODataAPI:
 			}
 			self.create_record(table, data)
 
-	def select_records(self, table: str, field:str, pattern: str) -> list:
+	def select_records (self, table: str, field:str, pattern: str) -> list:
 		"""
 		Select records from the OData table where TextData matches the given pattern.
 			pattern: Substring to match in TextData field
@@ -1338,14 +1341,14 @@ class FileMakerODataAPI:
 		Returns:
 			List of matching records
 		"""
-		endpoint = f'/{urllib.parse.quote(table)}?$filter=contains({field}, \'{pattern}\')'
+		endpoint = f'/{urllib.parse.quote(table)}?$filter=contains({field},\'{pattern}\')'
 		response = self._make_ppp_request(endpoint, method='GET')
 		
 		if response and 'value' in response:
 			return response['value']
 		return []
 
-	def update_record (self, table: str, id: str, field: str, value) -> dict:
+	def update_records (self, table: str, id: str, field: str, value) -> dict:
 		"""
 		For the given record ID, update a field with a new value.
 			id: Record ID
@@ -2125,7 +2128,7 @@ def manage_fms_service (action: str) -> bool:
 					print ('done')
 				else:
 					print ('failed')
-				print (f'{action.capitalize()}ing FMS service...',end='', flush=True)
+				print ('Stopping FMS service...', end='', flush=True)
 
 			else:
 				print ('The fmserverd process is not currently running')
