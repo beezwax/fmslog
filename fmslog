@@ -816,7 +816,7 @@ def test_odata_functions():
 
 	if USER and PASSWORD:
 		odata = FileMakerODataAPI (username=USER, password=PASSWORD)
-		
+
 		start_time = datetime.datetime.now()
 		# This also tests the ability to run a script.
 		print ('Deleting any pre-exising records...', flush=True, end='')
@@ -825,10 +825,13 @@ def test_odata_functions():
 		print ('Creating new records...', flush=True, end='')
 		odata.create_test_records('OData', 500)
 		print ('Selecting a set of records...', flush=True, end='')
-		odata.select_records('OData','TextData','a')
+		rec_list = odata.select_records('OData','TextData','a')
 		print ('done')
 		print ('Updating a set of records...', flush=True, end='')
-		odata.update_records('OData','a','B')
+
+		#	def update_test_records (self, table: str, id_list: list, field: str, source_pattern: str, dest_pattern: str) -> str:
+		odata.update_test_records('OData', rec_list, 'TextData', 'a', 'B')
+
 		print ('done')
 	else:
 		print ('Error: must specify both user and password for OData test file')
@@ -1221,7 +1224,7 @@ class FileMakerODataAPI:
 		OData template: https://host/fmi/odata/version/database-name/table-name
 		"""
 		url = f'{self.base_url}{endpoint}'
-		print ('url:', url)
+		#print ('url:', url)
 		
 		# Prepare headers
 		headers = {
@@ -1287,9 +1290,6 @@ class FileMakerODataAPI:
 			'scriptParameterValue': parameter
 		}
 		
-		print()
-		print (endpoint, 'POST', data)
-
 		response = self._make_ppp_request(endpoint, method='POST', data=data)
 		
 		if response and 'scriptResult' in response:
@@ -1339,8 +1339,11 @@ class FileMakerODataAPI:
 			pattern: Substring to match in TextData field
 			
 		Returns:
-			List of matching records
+			Data for any matching records
 		"""
+		
+		# from eluce2: To get metadata for just a single table, we must call /$metadata%23tableName (this is like the /$metadata#tableName that you often see returned in the context property, but with the hash url-encoded so it actually gets sent to the server)
+
 		endpoint = f'/{urllib.parse.quote(table)}?$filter=contains({field},\'{pattern}\')'
 		response = self._make_ppp_request(endpoint, method='GET')
 		
@@ -1348,7 +1351,7 @@ class FileMakerODataAPI:
 			return response['value']
 		return []
 
-	def update_records (self, table: str, id: str, field: str, value) -> dict:
+	def update_record (self, table: str, id: str, field: str, value) -> dict:
 		"""
 		For the given record ID, update a field with a new value.
 			id: Record ID
@@ -1361,13 +1364,13 @@ class FileMakerODataAPI:
 		OData template: https://host/fmi/odata/version/database-name/table-name(primary-key-value)
 		"""
 		endpoint = f'/{urllib.parse.quote(self.table)}({id})'
-		record = {field: value}
+		record = {field:value}
 		
 		# Send PATCH request to update the record
 		updated_record = self._make_ppp_request(endpoint, method='PATCH', data=record)
 		return updated_record
 
-	def update_test_records (self, table: str, id_list: list, field: str, source_pattern: str, dest_pattern: str) -> str:
+	def update_test_records (self, table: str, records: list, field: str, source_pattern: str, dest_pattern: str) -> str:
 		"""
 		Update records in the OData table where TextData matches the source_pattern,
 		replacing it with dest_pattern in the specified field.
@@ -1381,11 +1384,10 @@ class FileMakerODataAPI:
 		"""
 		updated_count = 0
 		
-		for record_id in id_list:
+		for record in records:
 			# Get the existing record
-			record = self._make_ppp_request(f'/{urllib.parse.quote(table)}({record_id})', method='GET')
-			
-			if record and field in record:
+						
+			if field in record:
 				# Replace source_pattern with dest_pattern in the specified field
 				original_value = record[field]
 				updated_value = original_value.replace(source_pattern, dest_pattern)
@@ -1393,7 +1395,7 @@ class FileMakerODataAPI:
 				if updated_value != original_value:
 					# Update the record with the new value
 					record[field] = updated_value
-					self._make_ppp_request(f'/{urllib.parse.quote(self.database)}({record_id})', method='PATCH', data=record)
+					self._make_ppp_request(f"/{urllib.parse.quote(table)}('{record['PrimaryKey']}')", method='PATCH', data=record)
 					updated_count += 1
 		
 		return updated_count
