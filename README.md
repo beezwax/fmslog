@@ -55,7 +55,7 @@ Copy the latest version of the `fmslog` file to a directory in user's command PA
 * macOS: `sudo curl -o /usr/local/bin/fmslog https://raw.githubusercontent.com/beezwax/fmslog/refs/heads/main/fmslog && sudo chmod +x /usr/local/bin/fmslog`
 * Ubuntu: `sudo curl -o /usr/bin/fmslog https://raw.githubusercontent.com/beezwax/fmslog/refs/heads/main/fmslog && sudo chmod +x /usr/bin/fmslog`
 
-Requires Python 3.9 or newer.
+Requires Python 3.9 or newer. On macOS, you may need to create the `/usr/local/bin` directory if FileMaker Server is not yet installed.
 
 ---
 
@@ -92,6 +92,7 @@ options:
   --stop-fms                stop the FileMaker Server service
   -s, --succinct            strip less useful details from log output (partially implemented)
   -t, --tail                wait for any new messages after printing current end of log
+  --test-odata				perform various operations using the OData API; requires the API_Testing file to be hosted on the server
   --truncate                cut off any output if beyond width of screen
   -V, --version             version info for fmslog and FMS components
 ```
@@ -187,6 +188,14 @@ The supported nouns are:
 Print messages as they are added to log files until user cancels with Ctrl-C.
 
 Use the form `--tail=<seconds>` to set how many seconds to wait between checks for new data.
+
+### --test-odata
+Runs various operations in the test file to verify functionality. You must specify the account (-u) and the password (-p) before the `--odata` option.
+
+After hosting the API_Testing file, a complete test command looks like this:
+`fmslog --test-odata -u api-test -p fmslog-access`
+
+The optional `time` command in the above example provides additional stats on CPU usage and how long the test took to complete.
 
 ### --truncate
 Remove any output from the end of the line that would cause a line wrap for the current screen width.

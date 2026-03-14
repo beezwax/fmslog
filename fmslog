@@ -52,7 +52,7 @@ EXAMPLES OF UNIMPLEMENTED USAGE
 Reset repo:  git fetch origin main; git reset --hard origin/main
 """
 
-VERSION = "0.43 - 2026-03-05"
+VERSION = "0.43 - 2026-03-08"
 
 #
 #	g e t _ f m s _ v e r s i o n
@@ -817,22 +817,26 @@ def test_odata_functions():
 	if USER and PASSWORD:
 		odata = FileMakerODataAPI (username=USER, password=PASSWORD)
 
-		start_time = datetime.datetime.now()
-		# This also tests the ability to run a script.
-		print ('Deleting any pre-exising records...', flush=True, end='')
-		odata.delete_all_records('OData')
-		print ('done')
-		print ('Creating new records...', flush=True, end='')
-		odata.create_test_records('OData', 500)
-		print ('Selecting a set of records...', flush=True, end='')
-		rec_list = odata.select_records('OData','TextData','a')
-		print ('done')
-		print ('Updating a set of records...', flush=True, end='')
-
-		#	def update_test_records (self, table: str, id_list: list, field: str, source_pattern: str, dest_pattern: str) -> str:
-		odata.update_test_records('OData', rec_list, 'TextData', 'a', 'B')
-
-		print ('done')
+		try:
+			start_time = datetime.datetime.now()
+			# This also tests the ability to run a script.
+			print ('Deleting any pre-exising records...', flush=True, end='')
+			odata.delete_all_records('OData')
+			print ('done')
+			print ('Creating new records...', flush=True, end='')
+			odata.create_test_records('OData', 2000)
+			print ('done')
+			print ('Selecting a set of records...', flush=True, end='')
+			rec_list = odata.select_records('OData','TextData','a')
+			print ('done')
+			print ('Updating a set of records...', flush=True, end='')
+	
+			#	def update_test_records (self, table: str, id_list: list, field: str, source_pattern: str, dest_pattern: str) -> str:
+			odata.update_test_records('OData', rec_list, 'TextData', 'a', 'B')
+			print ('done')
+		except urllib.error.HTTPError as e:
+			print ('Error:', str (e))
+			sys.exit(3)
 	else:
 		print ('Error: must specify both user and password for OData test file')
 
@@ -2070,13 +2074,17 @@ def list_backup_locations() -> set:
 	# There are two forms of the BackupTarget key, depending on where the type is defined.
 	backupRE = re.compile (r'name="BackupTarget".*>(.*)</key>')
 
-	with open (DBS_CONFIG_PATH, 'r', encoding='utf-8', errors='ignore') as f:
-		for line in f:
-			match = backupRE.search (line)
-			# Above may match targests that are emtpy except for "file:"
-			if match and match.group(1)[-1] != ':':
-				backup_locations.append (convert_filemaker_path (match.group(1)))
-	
+	try:
+		with open (DBS_CONFIG_PATH, 'r', encoding='utf-8', errors='ignore') as f:
+			for line in f:
+				match = backupRE.search (line)
+				# Above may match targests that are emtpy except for "file:"
+				if match and match.group(1)[-1] != ':':
+					backup_locations.append (convert_filemaker_path (match.group(1)))
+	except FileNotFoundError:
+		print (f"Error: Could not opent the configuration file at '{DBS_CONFIG_PATH}'")
+		sys.exit (4)
+
 	return set (backup_locations)
 
 
