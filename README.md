@@ -8,7 +8,7 @@ Some things that it does that using just tail, head, or Get-Content don't:
 - lists path, size, and modification dates for all logs
 - optionally truncate lines to avoid line wrap
 - FMS processes and network ports in use
-- sizes of database directories
+- disk space used for data, cache, and backup directories
 - connectivity tests for 10 different FMS endpoints
 - list versions of FMS components (NodeJS, Tomcat, etc.)
 

@@ -52,7 +52,7 @@ EXAMPLES OF UNIMPLEMENTED USAGE
 Reset repo:  git fetch origin main; git reset --hard origin/main
 """
 
-VERSION = "0.43 - 2026-03-08"
+VERSION = "0.44 - 2026-03-23"
 
 #
 #	g e t _ f m s _ v e r s i o n
@@ -74,11 +74,14 @@ def get_fms_version() -> str:
 				check=False).stdout.split('\n')
 			return fmsout_lines[1].split(': ')[1]
 		except IndexError:
-			return ''
+			return '<missing>'
 	elif platform.system() == 'Linux':
-		fmsout_lines = subprocess.run(['/usr/bin/apt-cache', 'policy', 'filemaker-server'], capture_output=True, text=True).stdout.split('\n')
-		return fmsout_lines[1].split(': ')[1]
-	
+		try:
+			fmsout_lines = subprocess.run(['/usr/bin/apt-cache', 'policy', 'filemaker-server'], capture_output=True, text=True).stdout.split('\n')
+			return fmsout_lines[1].split(': ')[1]
+		except IndexError:
+			return '<missing>'
+
 	if platform.system() == 'Windows':
 		return 'not implemented'
 	
