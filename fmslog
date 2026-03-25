@@ -1191,12 +1191,11 @@ class FileCheckError(Exception):
 		return self.message
 
 #
-#	c l a s s  F i l e M a k e r A d m i n A P I
+#	c l a s s  F i l e M a k e r O D a t a A P I
 #
 
-
 class FileMakerODataAPI:
-	"""Client for FileMaker Server Admin API"""
+	"""Client for FileMaker Server OData interface"""
 
 	def __init__(self, host='localhost', database='API_Testing', username='admin', password='apasswd'):
 		"""
@@ -1881,7 +1880,8 @@ def get_progressives_path() -> str:
 	progressives_path = None
 
 	# There are two forms of the BackupTarget key, depending on where the type is defined.
-	backupRE = re.compile (r'name="IncrementalBackupPath">(.*)</key>')
+	# Also, a type value may be present after name.
+	backupRE = re.compile (r'name="IncrementalBackupPath".*>(.*)</key>')
 
 	with open (DBS_CONFIG_PATH, 'r', encoding='utf-8', errors='ignore') as f:
 		for line in f:
@@ -2021,7 +2021,6 @@ def init_parser() -> argparse.ArgumentParser:
 	
 	return parser
 
-
 #
 #	l i s t_ a c t i v e _ p o r t s
 #
@@ -2063,7 +2062,7 @@ def list_active_ports() -> list:
 	return open_list
 
 #
-#
+#	l i s t _ b a c k u p _ l o c a t i o n s
 #
 
 def list_backup_locations() -> set:
@@ -2089,7 +2088,6 @@ def list_backup_locations() -> set:
 		sys.exit (4)
 
 	return set (backup_locations)
-
 
 #
 #	l i s t _ c r a s h _ r e p o r t s
