@@ -106,6 +106,8 @@ Start printing logs on or after the given duration. Durations are an optional nu
 - 'h': hours from now
 - 'd': days since midnight today (e.g., '2d' would be from midnight yesterday)
 
+Normally, one screen full of output starting at earliest message is output. Use the -n option to change this.
+
 ### -B, --backups
 
 List the paths, their sizes, and total size of hard linked files in backup sets. Target paths are determined by scanning FMS' preferences file.
