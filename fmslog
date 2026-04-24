@@ -52,7 +52,7 @@ EXAMPLES OF UNIMPLEMENTED USAGE
 Reset repo:  git fetch origin main; git reset --hard origin/main
 """
 
-VERSION = "0.44 - 2026-03-23"
+VERSION = "0.45 - 2026-04-23"
 
 #
 #	g e t _ f m s _ v e r s i o n
@@ -569,7 +569,6 @@ LOG_SPECS_ALL = {
 }
 
 LOG_SPECS = LOG_SPECS_ALL [platform.system()]
-
 
 LOG_CHOICES = list (LOG_SPECS.keys())
 LOG_CHOICES.sort()
@@ -1190,6 +1189,265 @@ class FileCheckError(Exception):
 	def __str__(self):
 		return self.message
 
+
+
+#
+#	c l a s s  F i l e M a k e r A d m i n A P I
+#
+
+class FileMakerAdminAPI:
+	"""Client for FileMaker Server Admin API"""
+
+	def __init__(self, host='localhost', username='admin', password='admin'):
+		"""
+		Initialize the FileMaker Admin API client.        
+			host: FileMaker Server hostname (default: 'localhost')
+			username: Admin username (default: 'admin')
+			password: Admin password (default: 'admin')
+		"""
+		self.host = host
+		self.username = username
+		self.password = password
+		self.token = None
+		self.base_url = f'https://{host}/fmi/admin/api/v2'
+		
+		# Create SSL context that doesn't verify certificates (for localhost testing)
+		self.ssl_context = ssl.create_default_context()
+		self.ssl_context.check_hostname = False
+		self.ssl_context.verify_mode = ssl.CERT_NONE
+
+	def _make_request(self, endpoint, method='GET', data=None):
+		"""
+		Make an HTTP request to the FileMaker Admin API.
+			endpoint: API endpoint path
+			method: HTTP method (GET, POST, DELETE, etc.)
+			data: Request body data (dict)
+			
+		Returns:
+			Parsed JSON response
+		"""
+		url = f'{self.base_url}{endpoint}'
+		
+		# Prepare headers
+		headers = {
+			'Content-Type': 'application/json'
+		}
+		
+		# Add token if we have one
+		if self.token:
+			headers['Authorization'] = f'Bearer {self.token}'
+		
+		# Prepare request data
+		request_data = None
+		if data:
+			request_data = json.dumps(data).encode('utf-8')
+		
+		# Create request
+		request = urllib.request.Request(
+			url,
+			data=request_data,
+			headers=headers,
+			method=method
+		)
+        
+		try:
+			# Make request with SSL context
+			response = urllib.request.urlopen(request, context=self.ssl_context)
+			response_data = response.read().decode('utf-8')
+			
+			if response_data:
+				return json.loads(response_data)
+			return None
+			
+		except urllib.error.HTTPError as e:
+			error_body = e.read().decode('utf-8')
+			print(f"HTTP Error {e.code}: {e.reason}")
+			print(f"Response: {error_body}")
+			raise
+		except urllib.error.URLError as e:
+			print(f"URL Error: {e.reason}")
+			raise
+
+	def authenticate(self) -> str:
+		"""
+		Authenticate to the FileMaker Server and obtain an access token.
+		Returns authentication token, or None on failure.
+		"""
+
+		# Create credentials string
+		credentials = f"{self.username}:{self.password}"
+		encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
+
+		# Create request with basic auth
+		url = f'{self.base_url}/user/auth'
+		headers = {
+			'Content-Type': 'application/json',
+			'Authorization': f'Basic {encoded_credentials}'
+		}
+
+		request = urllib.request.Request(url, headers=headers, method='POST')
+
+		try:
+			response = urllib.request.urlopen(request, context=self.ssl_context, timeout=5)
+			data = json.loads(response.read().decode('utf-8'))
+
+			self.token = data['response']['token']
+			return self.token
+
+		except urllib.error.HTTPError as e:
+			error_body = e.read().decode('utf-8')
+			print(f"Authentication failed: HTTP {e.code} - {e.reason}")
+			print(f"Response: {error_body}")
+			raise
+	
+	def count_databases(self):
+		"""
+		Count the number of databases on the server.
+		
+		Returns:
+			int: Number of databases
+		"""
+		response = self.get_databases()
+		if response and 'databases' in response:
+			count = len(response['databases'])
+			return count
+		return 0
+	
+	def get_clients(self):
+		"""
+		Get list of clients connected to the server.
+		
+		Returns:
+			dict: Response containing client information
+		"""
+		response = self._make_request('/clients')
+		return response ['response']
+	
+	def count_clients(self):
+		"""
+		Count the number of connected clients.
+		
+		Returns:
+			int: Number of clients
+		"""
+		response = self.get_clients()
+		if response and 'clients' in response:
+			count = len(response['clients'])
+			return count
+		return 0
+	
+	def get_databases(self):
+		"""
+		Get list of databases hosted on the server.
+		
+		Returns:
+			dict: Response containing database information
+		"""
+		response = self._make_request('/databases')
+		return response ['response']
+
+	def get_dapi_plugin_config(self) -> dict:
+		"""
+		Get DAPI (Data API) plugin configuration information.
+		"""
+		response = self._make_request('/plugins/DAPIPluginConfig')
+		return response['response']['config']
+
+	def get_dbs_plugin_config(self) -> dict:
+		"""
+		Get database plugin configuration information.
+		"""
+		response = self._make_request('/plugins/DbsPluginConfig')
+		return response['response']['config']
+
+	def get_wpe_plugin_config(self) -> dict:
+		"""
+		Get database plugin configuration information.
+		"""
+		response = self._make_request('/plugins/WpePluginConfig')
+		return response['response']['config']
+
+	def get_schedules(self):
+		"""
+		Get list of schedules configured on the server.
+		
+		Returns:
+			dict: Response containing schedule information
+		"""
+		response = self._make_request('/schedules')
+		return response['response']['schedules']
+	
+	def count_schedules(self) -> int:
+		"""
+		Fetch and count the number of FMS schedules.
+		
+		Returns:
+			int: Number of schedules
+		"""
+		schedules = self.get_schedules()
+		if schedules:
+			count = len(schedules)
+			return count
+		return 0
+	
+	def get_script_logs(self) -> dict:
+		"""
+		Get list of script logs and their state (eg, enabled = True).
+		"""
+		response = self._make_request('/server/scripterrorslog')
+		return response['response']
+
+	def get_server_general_settings(self) -> dict:
+		"""
+		Get general server settings, similar to `fmsadmin get serverconfig`.
+		"""
+		response = self._make_request('/server/config/general')
+		return response['response']
+
+	def get_server_parallel_backup_setting(self) -> str:
+		"""
+		Get server parallel backup setting (whether parallel backups are enabled).
+		"""
+		response = self._make_request('/server/config/parallelbackup')
+		return response['response']['parallelBackupEnabled']
+
+	def get_server_current_folder_settings(self) -> str:
+		"""
+		Get target directories for for databases and default backup paths.
+		"""
+		response = self._make_request('/server/currentfoldersettings')
+		return response['response']
+
+	def get_server_security_setting(self) -> str:
+		"""
+		Get server security setting (whether unsafe databases should be hosted).
+		"""
+		response = self._make_request('/server/config/security')
+		return response['response']['requireSecureDB']
+	
+	def get_server_metadata(self) -> dict:
+		"""
+		Get misc. server information.
+		"""
+		response = self._make_request('/server/metadata')
+		return response['response']
+
+	def invalidate_token(self):
+		"""
+		Invalidate the current authentication token (logout).
+		"""
+		if not self.token:
+			return
+		
+		try:
+			self._make_request('/user/auth/' + self.token, method='DELETE')
+			self.token = None
+		except Exception as e:
+			print(f"Error invalidating token: {e}")
+			self.token = None
+
+
+#
 #
 #	c l a s s  F i l e M a k e r O D a t a A P I
 #
@@ -1554,7 +1812,7 @@ def get_apache_version() -> str:
 			text=True).stdout.split('\n')
 		return re.search (r'Apache/(.*) ', httpd_out_lines[0]).group(1)
 	except FileNotFoundError:
-		return 'Apache not at expected path'
+		return 'not at expected path'
 
 #
 #	g e t _ f o l d e r _ s i z e
@@ -1876,6 +2134,7 @@ def get_progressives_path() -> str:
 	Get the directory path for the Progressive Backups folder.
 	"""
 	#  name="IncrementalBackupPath">filelinux:/FileMakerData/Progressive/</key>
+	#  name="IncrementalBackupPath" type="string">filelinux:/opt/FileMaker/FileMaker Server/Data/Progressive/</key>
 
 	progressives_path = None
 
@@ -2930,12 +3189,19 @@ def print_certificate_info (host: str, port=443) -> bool:
 	context =  ssl.create_default_context()
 	context.check_hostname = False
 	context.verify_mode = ssl.CERT_NONE
+	py_version = platform.python_version_tuple()
 	
 	with tempfile.NamedTemporaryFile (mode='w', encoding='utf8') as cert_file:
 		cert_file_path = cert_file.name
-
+		
 		try:
-			cert_file.write(ssl.get_server_certificate((host, port)))
+			if py_version[0] == '3' and py_version[1] == '9':
+				socket.setdefaulttimeout(5)
+				cert_file.write(ssl.get_server_certificate((host, port)))
+			else:
+				# timeout option requires Python 3.10 or higher
+				cert_file.write(ssl.get_server_certificate((host, port), timeout=5))
+
 			# We don't have to close before _test_decode_cert below as long as we flush first.
 			cert_file.flush()
 		except ConnectionRefusedError:
@@ -3076,7 +3342,7 @@ def print_tls_version (host: str, port=443) -> bool:
 	except ConnectionRefusedError:
 		print ('SSL/TLS version: ', end='')
 		print_error (f'Error, could not connect to {host}:{port}')
-	except timeout:
+	except socket.timeout:
 		print ('SSL/TLS version: ', end='')
 		print_error (f'Error, connection to {host}:{port} timed out')
 	except ssl.SSLError as e:
