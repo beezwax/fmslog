@@ -1818,17 +1818,25 @@ def get_apache_version() -> str:
 #	g e t _ f o l d e r _ s i z e
 #
 
-def get_folder_stats (path='.', exclude_dir=None) -> tuple:
+def get_folder_stats (path='.', exclude_dirs=None) -> tuple:
 	"""
 	For the given directory path, recursively travel all its contents to get:
 	- total size of all files (eg, du)
 	- the number of files found
 	- size of of all files using hard links
+	The exclude_dirs parameter can be used to exclude one or more top-level directories.
 	"""
 
 	total = 0
 	file_count = 0
 	hard_linked = 0
+
+	if isinstance(exclude_dirs, str):
+		exclude_dirs = {exclude_dirs}
+	elif exclude_dirs is not None:
+		exclude_dirs = set(exclude_dirs)
+	else:
+		exclude_dirs = set()
 
 	if path:
 		try:
@@ -1839,8 +1847,8 @@ def get_folder_stats (path='.', exclude_dir=None) -> tuple:
 					if os.stat(entry).st_nlink > 1:
 						hard_linked += entry.stat().st_size
 				elif entry.is_dir():
-					if entry.name != exclude_dir:
-						sub_total,sub_count,sub_linked = get_folder_stats (entry.path, exclude_dir=exclude_dir)
+					if entry.name not in exclude_dirs:
+						sub_total,sub_count,sub_linked = get_folder_stats (entry.path)
 						total += sub_total
 						file_count += sub_count
 						hard_linked += sub_linked
@@ -1848,7 +1856,7 @@ def get_folder_stats (path='.', exclude_dir=None) -> tuple:
 			print ('Error: Permission denied for', path)
 		except FileNotFoundError:
 			# Will get this if target is empty.
-			return (0, 0, 0)
+			return (-1, 0, 0)
 
 	return (total,file_count,hard_linked)
 
@@ -2666,10 +2674,10 @@ def print_data_dirs_info():
 	Print the database folder paths extracted from Event.log.
 	"""
 	
-	# TODO: add /opt/FileMaker/FileMaker Server/Web Publishing/publishing-engine/wip/Documents/ 
-
-	RCDIR = 'RC_Data_FMS'
-
+	rc_dir = 'RC_Data_FMS'
+	rm_dir = 'Removed_by_FMS'
+	exclude_dirs = [rc_dir, rm_dir]
+	
 	(default_path, secure_path, additional_path1, additional_path2, remote_container_path1, remote_container_path2) = get_db_directories()
 	
 	print ()
@@ -2677,63 +2685,101 @@ def print_data_dirs_info():
 	print ('                          {:>11}  {:>16}  {:>16}  {}'.format ('FILES', 'SIZE', 'H/L SIZE', 'PATH'))
 
 	# DEFAULT
-	db_size,file_count,hl_size = get_folder_stats (default_path, exclude_dir=RCDIR)
-	print (f'Default:                  {file_count:11,}  {db_size:16,}  {hl_size:16,}  {default_path}')
+	dir_size,file_count,hl_size = get_folder_stats (default_path, exclude_dirs=exclude_dirs)
+	print (f'Default:                  {file_count:11,}  {dir_size:16,}  {hl_size:16,}  {default_path}')
 
-	with Spinner ('  ' + RCDIR + ':           '):
-		rc_path = os.path.join (default_path, RCDIR)
-		rc_size,file_count,hl_size = get_folder_stats (rc_path)
-	print (f'{file_count:11,}  {rc_size:16,}  {hl_size:>16}  {rc_path}')
+	with Spinner ('  ' + rc_dir + ':           '):
+		rc_path = os.path.join (default_path, rc_dir)
+		dir_size,file_count,hl_size = get_folder_stats (rc_path)
+	if dir_size >= 0:
+		print (f'{file_count:11,}  {dir_size:16,}  {hl_size:>16}  {rc_path}')
+	else:
+		print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
+
+	with Spinner ('  ' + rm_dir + ':        '):
+		rm_path = os.path.join (default_path, rm_dir)
+		dir_size,file_count,hl_size = get_folder_stats (rm_path)
+	if dir_size >= 0:
+		print (f'{file_count:11,}  {dir_size:16,}  {hl_size:>16,}  {rm_path}')
+	else:
+		print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
 
 	# SECURE
-	size,file_count,hl_size = get_folder_stats (secure_path, exclude_dir=RCDIR)
-	print (f'Secure:                   {file_count:11,}  {size:16,}  {hl_size:16,}  {secure_path}')
+	dir_size,file_count,hl_size = get_folder_stats (secure_path, exclude_dirs=exclude_dirs)
+	print (f'Secure:                   {file_count:11,}  {dir_size:16,}  {hl_size:16,}  {secure_path}')
 
-	with Spinner ('  ' + RCDIR + ':           '):
-		rc_path = os.path.join (secure_path, RCDIR)
-		rc_size,file_count,hl_size = get_folder_stats (rc_path)
-	if rc_size >= 0:
-		print (f'{file_count:11,}  {rc_size:16,}  {hl_size:>16,}  {rc_path}')
+	with Spinner ('  ' + rc_dir + ':           '):
+		rc_path = os.path.join (secure_path, rc_dir)
+		dir_size,file_count,hl_size = get_folder_stats (rc_path)
+	if dir_size >= 0:
+		print (f'{file_count:11,}  {dir_size:16,}  {hl_size:>16,}  {rc_path}')
+	else:
+		print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
+
+	with Spinner ('  ' + rm_dir + ':        '):
+		rm_path = os.path.join (secure_path, rm_dir)
+		dir_size,file_count,hl_size = get_folder_stats (rm_path)
+	if dir_size >= 0:
+		print (f'{file_count:11,}  {dir_size:16,}  {hl_size:>16,}  {rm_path}')
 	else:
 		print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
 
 	# ADDITIONAL 1
 	if additional_path1:
-		size,file_count,hl_size = get_folder_stats (additional_path1, RCDIR)
-		print (f'Additional Databases #1:  {file_count:11,}  {size:16,}  {hl_size:16,}  {additional_path1}')
+		dir_size,file_count,hl_size = get_folder_stats (additional_path1, exclude_dirs=exclude_dirs)
+		print (f'Additional Databases #1:  {file_count:11,}  {dir_size:16,}  {hl_size:16,}  {additional_path1}')
 
-		with Spinner ('  ' + RCDIR + ':           '):
-			rc_path = os.path.join (additional_path1, RCDIR)
-			rc_size,file_count,hl_size = get_folder_stats (rc_path)
-		if rc_size >= 0:
-			print (f'{file_count:11,}  {rc_size:16,}  {hl_size:>16,}  {rc_path}')
+		with Spinner ('  ' + rc_dir + ':           '):
+			rc_path = os.path.join (additional_path1,rc_dir)
+			dir_size,file_count,hl_size = get_folder_stats (rc_path)
+		if dir_size >= 0:
+			print (f'{file_count:11,}  {dir_size:16,}  {hl_size:>16,}  {rc_path}')
 		else:
 			print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
 
 		with Spinner ('  External Container #1: '):
-			rc_size,file_count,hl_size = get_folder_stats (remote_container_path1)
-		if True: # rc_size >= 0:
-			print (f'{file_count:11,}  {rc_size:16,}  {hl_size:>16,}  {remote_container_path1}')
+			dir_size,file_count,hl_size = get_folder_stats (remote_container_path1)
+		if remote_container_path1 and dir_size >= 0:
+			print (f'{file_count:11,}  {dir_size:16,}  {hl_size:>16,}  {remote_container_path1}')
+		else:
+			print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
+
+		with Spinner ('  ' + rm_dir + ':        '):
+			rm_path = os.path.join (additional_path1, rm_dir)
+			dir_size,file_count,hl_size = get_folder_stats (rm_path)
+		if dir_size >= 0:
+			print (f'{file_count:11,}  {dir_size:16,}  {hl_size:>16,}  {rm_path}')
 		else:
 			print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
 
 	# ADDITIONAL 2
 	if additional_path2:
-		size,file_count,hl_size = get_folder_stats (additional_path2, RCDIR)
-		print (f'Additional Databases #2:  {file_count:11,}  {size:16,}  {hl_size:16,}  {additional_path2}')
+		dir_size,file_count,hl_size = get_folder_stats (additional_path2, exclude_dirs=exclude_dirs)
+		print (f'Additional Databases #2:  {file_count:11,}  {dir_size:16,}  {hl_size:16,}  {additional_path2}')
 
-		with Spinner ('  ' + RCDIR + ':           '):
-			rc_path = os.path.join (additional_path2, RCDIR)
-			rc_size,file_count,hl_size = get_folder_stats (rc_path)
-		if rc_size >= 0:
+		with Spinner ('  ' + rc_dir + ':           '):
+			rc_path = os.path.join (additional_path2, rc_dir)
+			dir_size,file_count,hl_size = get_folder_stats (rc_path)
+		if dir_size >= 0:
 			hard_links_yn = "Yes" if hl_size else "No"
-			print (f'{file_count:12,}  {rc_size:16,}  {hl_size:>16,}  {rc_path}')
+			print (f'{file_count:12,}  {dir_size:16,}  {hl_size:>16,}  {rc_path}')
 		else:
 			print ('{:11}  {:>16}  {:>16}  {}'.format ('-', '-', '-'))
 
 		with Spinner ('  External Container #2: '):
-			rc_size,file_count,hl_size = get_folder_stats (remote_container_path2)
-		print (f'{file_count:11,}  {rc_size:16,}  {hl_size:16,}  {remote_container_path2}')
+			dir_size,file_count,hl_size = get_folder_stats (remote_container_path2)
+		if remote_container_path2 and dir_size >= 0:
+			print (f'{file_count:11,}  {dir_size:16,}  {hl_size:16,}  {remote_container_path2}')
+		else:
+			print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
+
+		with Spinner ('  ' + rm_dir + ':        '):
+			rm_path = os.path.join (additional_path2, rm_dir)
+			dir_size,file_count,hl_size = get_folder_stats (rm_path)
+		if dir_size >= 0:
+			print (f'{file_count:11,}  {dir_size:16,}  {hl_size:>16,}  {rm_path}')
+		else:
+			print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
 
 	print ()
 	print ('=== OTHER DATA DIRECTORIES & FILES ===')
@@ -2814,12 +2860,15 @@ def print_fms_cache_info():
 	"""
 	Display information about FMS' cache usage.
 	"""
-	cache_path = os.path.join (BASE_PATH, 'Data', 'Cache')
+	cache_path = os.path.join (BASE_PATH, 'Data', 'Caches')
 
 	path_label = 'FMS Cache'
-	cache_size,file_count,hl_size = get_folder_stats (cache_path)
-
-	print (f'{path_label:24}  {file_count:11,}  {cache_size:16,}                    {cache_path}')
+	dir_size,file_count,hl_size = get_folder_stats (cache_path)
+	
+	if dir_size >= 0:
+		print (f'{path_label:24}  {file_count:11,}  {dir_size:16,}                    {cache_path}')
+	else:
+		print ('{:24}  {:>11}  {:>16}                    {}'.format (path_label, '-', '-', cache_path))
 
 #
 #	p r i n t _ h o s t _ i n f o
