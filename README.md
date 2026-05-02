@@ -181,7 +181,7 @@ Shorten the output of log lines where possible. This includes things like redund
 ### -S, --set VERB NOUN
 Change FMS configuration options. It takes two parameters, a noun and a verb. Currently, verbs are `enable` or `disable`.
 The supported nouns are:
-- `debuglogging`: detailed FMS logs such as fmsDebug.log; This can significantly slow down some server operations and quickly create large log files
+- `debuglogging`: detailed FMS logs such as fmsDebug.log; This could significantly slow down some server operations and quickly creates large log files
 - `clientstats`: user specific statistics for each log interval
 - `serverstats`: database engine statistics
 - `topcallstats`: statistics for top 25 calls

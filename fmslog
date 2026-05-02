@@ -52,7 +52,7 @@ EXAMPLES OF UNIMPLEMENTED USAGE
 Reset repo:  git fetch origin main; git reset --hard origin/main
 """
 
-VERSION = "0.45 - 2026-04-23"
+VERSION = "0.46 - 2026-05-02"
 
 #
 #	g e t _ f m s _ v e r s i o n
@@ -582,6 +582,7 @@ CLARIS_CONFIG = """
 {
 	"AlwaysPrint": true,
 	"ForceOutput": true,
+	"RemoteCalls": true,
 	"Server": true
 }
 """
