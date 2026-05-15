@@ -81,7 +81,7 @@ options:
   -h, --head                display the start of the specified log files instead of its tail
   --help                    display command details
   -H, --headers-off         turn off headers for all logs
-  --host-info               extended list server configuration settings; requires admin console credentials (-u and -p)
+  --host-info               extended list of server configuration settings using the CLI and FMS Admin API; requires admin console credentials (-u and -p)
   -i, --ignore-case         make filter's regex case insensitive
   -L, --list                list all log files and crash reports, including size, date created & modified, sorted by modification time
   -n, --number RANGE        quantity of lines to print
