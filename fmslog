@@ -52,7 +52,7 @@ EXAMPLES OF UNIMPLEMENTED USAGE
 Reset repo:  git fetch origin main; git reset --hard origin/main
 """
 
-VERSION = "0.47 - 2026-05-14"
+VERSION = "0.48 - 2026-05-20"
 
 #
 #	g e t _ f m s _ v e r s i o n
@@ -410,6 +410,13 @@ LOG_SPECS_BASE = {
 	'wpedebug': {
 		'path': 'Logs/wpe_debug.log',
 		'lghd': False,
+		'tbst': 8
+	},
+	
+	'xdbc': {
+		'path': 'Database Server/bin/xdbc.log',
+		'lghd': True,
+		'head': None,
 		'tbst': 8
 	}
 }
