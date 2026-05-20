@@ -52,7 +52,7 @@ EXAMPLES OF UNIMPLEMENTED USAGE
 Reset repo:  git fetch origin main; git reset --hard origin/main
 """
 
-VERSION = "0.46 - 2026-05-02"
+VERSION = "0.47 - 2026-05-14"
 
 #
 #	g e t _ f m s _ v e r s i o n
@@ -251,8 +251,8 @@ LOG_SPECS_BASE = {
 		'lghd': True,
 		#        ---------1---------2---------3---------4---------5---------6---------7---------8---------9---------0---------
 		#			2025-08-18 23:15:30.125 -0700  Information  228   some-dev.filemaker.beezwax.net  The previous log file reached maximum size, and was renamed to "Event-old.log".
-		'head': 'TIMESTAMP                ZONE  LEVEL        CODE  HOST                            MESSAGE',
-		'tbst': [31,44,50,82],
+		'head': 'TIMESTAMP                ZONE  LEVEL        CODE  HOST                          MESSAGE',
+		'tbst': [31,44,50,80],
 		#			2025-08-18 23:15:30.125  Information  228   some-dev.filemaker.beezwax.net  The previous log file reached maximum size, and was renamed to "Event-old.log".
 		'shed': 'TIMESTAMP                LEVEL        CODE  MESSAGE',
 		'shtb': [26,39,45,77]
@@ -582,7 +582,8 @@ CLARIS_CONFIG = """
 {
 	"AlwaysPrint": true,
 	"ForceOutput": true,
-	"RemoteCalls": true,
+	"RemoteCalls": true,		# May want to turn off if not debugging client connectivity
+	"ServerCommands": true,
 	"Server": true
 }
 """
@@ -2610,6 +2611,70 @@ def print_backup_info():
 		print ('Not defined')
 	print()
 
+#
+#	p r i n t _ c e r t i f i c a t e _ i n f o
+#
+
+def print_certificate_info (host: str, port=443) -> bool:
+	"""
+	Display the SSL certificate attributes used by host.
+	This uses an undocumented interface, as all Python alternatives
+	to extract SSL info require additional modules to be installed.
+	https://github.com/python/cpython/blob/main/Lib/test/test_ssl.py
+	"""
+	
+	context =  ssl.create_default_context()
+	context.check_hostname = False
+	context.verify_mode = ssl.CERT_NONE
+	py_version = platform.python_version_tuple()
+	
+	with tempfile.NamedTemporaryFile (mode='w', encoding='utf8') as cert_file:
+		cert_file_path = cert_file.name
+		
+		try:
+			if py_version[0] == '3' and py_version[1] == '9':
+				socket.setdefaulttimeout(5)
+				cert_file.write(ssl.get_server_certificate((host, port)))
+			else:
+				# timeout option requires Python 3.10 or higher
+				cert_file.write(ssl.get_server_certificate((host, port), timeout=5))
+
+			# We don't have to close before _test_decode_cert below as long as we flush first.
+			cert_file.flush()
+		except ConnectionRefusedError:
+			print (f'https://{host}:{port} not responding')
+			return False
+		except Exception as e:
+			print (':', e)
+			return False
+		
+		try:
+			cert_dict = ssl._ssl._test_decode_cert(cert_file_path)
+		except Exception as e:
+			print('Error decoding certificate: {e:}')
+		else:
+			print ('Subject:')
+			print (' ',end='')
+			pprint.pprint (cert_dict ['subject'])
+			if 'subjectAltName' in cert_dict:
+				print (' ',end='')
+				pprint.pprint (cert_dict ['subjectAltName'], indent=2)
+			print ('Not Before:', cert_dict ['notBefore'])
+			print ('Not After:', cert_dict ['notAfter'])
+			if 'OCSP' in cert_dict:
+				print ('OCSP:', cert_dict ['OCSP'])
+			if 'caIssuers' in cert_dict:
+				print ('CA Issuers:', cert_dict ['caIssuers'])
+			print ('Serial Number:', cert_dict ['serialNumber'])
+			print ('Issuer:')
+			pprint.pprint (cert_dict['issuer'], indent=1)
+			print ('Version:', cert_dict ['version'])
+	
+	return True
+
+#
+#	p r i n t _ c r a s h _ r e p o r t s
+#
 
 def print_crash_reports() -> str:
 	"""
@@ -2789,6 +2854,7 @@ def print_data_dirs_info():
 	print_documents_info()
 	print_documents_web_info()
 	print_fmtmp_info()
+	print_standby_info()
 	print ()
 
 #
@@ -3225,65 +3291,22 @@ def print_net_status():
 	print ()
 
 #
-#	p r i n t _ c e r t i f i c a t e _ i n f o
+#	p r i n t _ s t a n d b y _ i n f o
 #
 
-def print_certificate_info (host: str, port=443) -> bool:
+def print_standby_info():
 	"""
-	Display the SSL certificate attributes used by host.
-	This uses an undocumented interface, as all Python alternatives
-	to extract SSL info require additional modules to be installed.
-	https://github.com/python/cpython/blob/main/Lib/test/test_ssl.py
+	Display disk usage for the Standby service, if enabled.
+	It maintains a structure similar to what Progressive
+	Backups use, with incremental copies of .fmp12 files
+	redo logs, etc.
 	"""
-	
-	context =  ssl.create_default_context()
-	context.check_hostname = False
-	context.verify_mode = ssl.CERT_NONE
-	py_version = platform.python_version_tuple()
-	
-	with tempfile.NamedTemporaryFile (mode='w', encoding='utf8') as cert_file:
-		cert_file_path = cert_file.name
-		
-		try:
-			if py_version[0] == '3' and py_version[1] == '9':
-				socket.setdefaulttimeout(5)
-				cert_file.write(ssl.get_server_certificate((host, port)))
-			else:
-				# timeout option requires Python 3.10 or higher
-				cert_file.write(ssl.get_server_certificate((host, port), timeout=5))
 
-			# We don't have to close before _test_decode_cert below as long as we flush first.
-			cert_file.flush()
-		except ConnectionRefusedError:
-			print (f'https://{host}:{port} not responding')
-			return False
-		except Exception as e:
-			print (':', e)
-			return False
-		
-		try:
-			cert_dict = ssl._ssl._test_decode_cert(cert_file_path)
-		except Exception as e:
-			print('Error decoding certificate: {e:}')
-		else:
-			print ('Subject:')
-			print (' ',end='')
-			pprint.pprint (cert_dict ['subject'])
-			if 'subjectAltName' in cert_dict:
-				print (' ',end='')
-				pprint.pprint (cert_dict ['subjectAltName'], indent=2)
-			print ('Not Before:', cert_dict ['notBefore'])
-			print ('Not After:', cert_dict ['notAfter'])
-			if 'OCSP' in cert_dict:
-				print ('OCSP:', cert_dict ['OCSP'])
-			if 'caIssuers' in cert_dict:
-				print ('CA Issuers:', cert_dict ['caIssuers'])
-			print ('Serial Number:', cert_dict ['serialNumber'])
-			print ('Issuer:')
-			pprint.pprint (cert_dict['issuer'], indent=1)
-			print ('Version:', cert_dict ['version'])
-	
-	return True
+	standby_path = os.path.join (BASE_PATH, 'Data','Standby') 
+
+	standby_size,file_count,hl_size = get_folder_stats (standby_path)
+	# Any point in displaying if has hard links?
+	print (f'{file_count:11,}  {standby_size:16,}                    {standby_path}')
 
 
 #
