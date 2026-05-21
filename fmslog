@@ -34,23 +34,6 @@ import textwrap, threading, time, ssl, urllib.request
 from enum import Enum
 from contextlib import ExitStack
 
-"""
-POSSIBLE NEW OPTIONS
-	non-standard install location
-	'top' or iostat like option
-	scan all logs for recent errors, exceptions, etc.
-	summarize results where possible (eg, count, min, max, sum)?
-	convert table IDs
-	paged output
-	remote/external log source via SSH
-	for succinct mode, change 'Information' to 'Info' and 'Warning' to 'Warn' (Error will then be longest)
-	list usage in Data/Caches
-
-EXAMPLES OF UNIMPLEMENTED USAGE
-	fmslog --ssh simon@server.beezwax.net topcall  # if using user's default 'SSH key
-
-Reset repo:  git fetch origin main; git reset --hard origin/main
-"""
 
 VERSION = "0.48 - 2026-05-20"
 
