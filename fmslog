@@ -9,14 +9,14 @@ Purpose: Display FileMaker Server logs, change logging options, and get resource
 
 import argparse
 import base64
-import curses
+#import curses
 import datetime
 import glob
 import http.client
 import itertools
 import json
 import linecache
-import mmap
+#import mmap
 import os
 import pathlib
 import platform
@@ -34,8 +34,7 @@ import textwrap, threading, time, ssl, urllib.request
 from enum import Enum
 from contextlib import ExitStack
 
-
-VERSION = "0.48 - 2026-05-20"
+VERSION = "0.48 - 2026-05-25"
 
 #
 #	g e t _ f m s _ v e r s i o n
@@ -76,9 +75,7 @@ TIMESTAMP_START = None
 FILTER_REGEX = None
 FILTER_IGNORE_CASE = False
 
-PASSWORD = None
 TEXTWRAP = textwrap.TextWrapper(width=120,tabsize=10)
-USER = None
 
 class OutputMode (Enum):
 	HEAD = 1
@@ -568,11 +565,14 @@ HELP_EPILOGUE = """Log names supported on this platform are:\n\n  """ + '\n  '.j
 
 ALL_CHOICES = LOG_CHOICES  # TODO: need to add in choices that aren't log names?
 
+# ClarisConfig.json default text.
+
 CLARIS_CONFIG = """
 {
 	"AlwaysPrint": true,
 	"ForceOutput": true,
-	"RemoteCalls": true,		# May want to turn off if not debugging client connectivity
+	// May want to turn off RemoteCalls if not debugging client connectivity.
+	"RemoteCalls": true,
 	"ServerCommands": true,
 	"Server": true
 }
@@ -992,7 +992,7 @@ def claris_config_write(target_dir: str) -> bool:
 		print ('The ClarisConfig.json file has been created.')
 		print ('Restart FMS to apply the change.')
 		print ()
-		return True
+
 	except PermissionError:
 		print("Error: Could not write to", config_path)
 		print ('Adjust permissions or run fmslog with elevated privileges.')
@@ -2437,82 +2437,6 @@ def manage_fms_service (action: str) -> bool:
 	print (service_proc.stderr)
 	return service_proc.returncode == 0
 
-
-def odata_tests (file_name='API_Testing') -> bool:
-	"""
-	Execute several different OData requests to verify correct behavior.
-	"""
-	
-	# clear previous data
-	# create test records
-	# query test records
-	# update test records
-	# delete test records
-	pass
-
-
-
-#
-#	p r i n t _ s s l _ o p t i o n s_ c r y p t o
-#
-
-def print_ssl_options_crypto (host: str, port=443) -> bool:
-	"""
-	Get the TLS version and SSL cert data used for a test connection to the server.
-	"""
-	# Requires non-default module.
-	#from cryptography import x509
-	#from cryptography.hazmat.backends import default_backend
-	
-	return_flag = False
-	context =  ssl.create_default_context()
-	context.check_hostname = False
-	context.verify_mode = ssl.CERT_NONE
-	try:
-		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		sock.settimeout (4)
-		ssock = context.wrap_socket(sock, server_hostname=host)
-		ssock.connect ((host, port)) # we don't need the connection value
-		return_flag = True
-		print('   Security Protocol:', ssock.version())
-		cert_der = ssock.getpeercert(binary_form=True)
-		print (cert_der,'\n')
-		cert = x509.load_der_x509_certificate(cert_der, default_backend())
-		print ('  ', cert)
-	except ssl.SSLError as e:
-		print ('  ', e)
-	finally:
-		sock.close()
-	
-	return return_flag
-
-
-def pick_from_list (options: list, prompt: str) -> int:
-	"""
-	Display a numbered list of items from item_list, prompting user to select one.
-	Returns the index of the selected item, or -1 if cancelled.
-	"""
-	
-	input_prompt = prompt + ' (ctl-C to cancel): '
-
-	for i, item in enumerate (options):
-		print (f'  {i+1}: {item}')
-
-	print ()
-	user_input = ''
-
-	try:
-		selection = input (input_prompt)
-
-		while user_input not in map (str, range(1, len(options) + 1)):
-			user_input = input (input_prompt)
-
-	except KeyboardInterrupt:
-		print ('\nCancelled.')
-		return -1
-
-	return int(user_input) - 1
-
 #
 #	p a r s e _ b e g i n _ t i m e
 #
@@ -2555,6 +2479,35 @@ def parse_begin_time (time_str: str) -> datetime.datetime:
 	return new_time
 
 #
+#	p i c k _ f r o m _ l i s t
+#
+
+def pick_from_list (options: list, prompt: str) -> int:
+	"""
+	Display a numbered list of items from item_list, prompting user to select one.
+	Returns the index of the selected item, or -1 if cancelled.
+	"""
+	
+	input_prompt = prompt + ' (ctl-C to cancel): '
+
+	for i, item in enumerate (options):
+		print (f'  {i+1}: {item}')
+
+	print ()
+	user_input = ''
+
+	try:
+		selection = input (input_prompt)
+
+		while user_input not in map (str, range(1, len(options) + 1)):
+			user_input = input (input_prompt)
+
+	except KeyboardInterrupt:
+		print ('\nCancelled.')
+		return -1
+
+	return int(user_input) - 1
+
 #
 #	p r i n t _ b a c k u p _ i n f o
 #
