@@ -2,7 +2,7 @@
 # -*- Mode:Python; indent-tabs-mode:nil; tab-width:3; encoding:utf-8 -*-
 
 """
-Filename: fmslog.py
+Filename: fmslog
 Author: Simon Brown on 10/15/2025
 Purpose: Display FileMaker Server logs, change logging options, and get resource usage.
 """
@@ -484,7 +484,7 @@ else:
 			'head': 'nginx-access.log\n' + \
 					'TIMESTAMP                  STATUS          SIZE  ADDRESS          USER                REQUEST                                                                 AGENT         REFERRER',
 			'tbst': [], # [17,36,64,125,131,140,170],
-			'frmt': '{time_iso8601}  {status:6}  {bytes_sent:12,}  {remote_addr:15}  {remote_user:18}  {request:70}  {http_user_agent:12}  {http_referer:8}'
+			'frmt': '{time_iso8601}  {status:6}  {bytes_sent:12,}  {remote_addr:15}  {remote_user:18}  {request:70}  {http_user_agent:12}  {http_referer:8}\n'
 		}
 	}
 LOG_SPECS_LINUX.update (NGINX_ACCESS)
@@ -2983,7 +2983,7 @@ def print_log (log_name: str, count: int):
 	"""
 
 	lines_printed = -1
-	print (OUTPUT_MODE)
+	#print (OUTPUT_MODE)
 	
 	if OUTPUT_MODE is OutputMode.TAIL:
 		lines_printed = print_tail (log_name, count, SHOW_HEADERS, SUCCINCT_MODE)
