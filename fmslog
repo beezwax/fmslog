@@ -7,6 +7,10 @@ Author: Simon Brown on 10/15/2025
 Purpose: Display FileMaker Server logs, change logging options, and get resource usage.
 """
 
+
+VERSION = "0.50 - 2026-06-12"
+
+
 import argparse
 import base64
 #import curses
@@ -16,7 +20,6 @@ import http.client
 import itertools
 import json
 import linecache
-#import mmap
 import os
 import pathlib
 import platform
@@ -30,12 +33,13 @@ import string
 import subprocess
 import sys
 import tempfile
-import textwrap, threading, time, ssl, urllib.request
+import textwrap
+import threading
+import time
+import ssl
+import urllib.request, urllib.parse, urllib.error
 from enum import Enum
 from contextlib import ExitStack
-
-VERSION = "0.49 - 2026-05-27"
-
 
 #
 #	g e t _ f m s _ v e r s i o n
@@ -371,7 +375,7 @@ LOG_SPECS_BASE = {
 		#        ---------1---------2---------3---------4---------5---------6---------7---------8---------9---------0---------
 		#			2025-08-11 03:00:26.470 -0700  401   Schedule "daily mailing" scripting error (401) at "TOOL : delete mailing batches without queued logs [PSoS] : 22 : Perform Find".
 		'head': 'TIMESTAMP                ZONE  CODE  MESSAGE',
-		'tbst': [32,38],
+		'tbst': [31,37],
 		#			2025-08-11 03:00:26.470  401   Schedule "daily mailing" scripting error (401) at "TOOL : delete mailing batches without queued logs [PSoS] : 22 : Perform Find".
 		'shtb': [26,32],
 	},
@@ -828,10 +832,51 @@ def check_file_validity (path: str):
 		raise FileCheckError (f"'{path}' is a directory")
 
 #
+#	t e s t _ d a p i _ f u n c t i o n s
+#
+
+def test_dapi_functions():
+	"""Test basic functionality of the Data API by creating, reading, and updating records in the API_Testing.fmp12 test file."""
+
+	if USER and PASSWORD:
+		dapi = FileMakerDAPI (username=USER, password=PASSWORD)
+		if not dapi.authenticate():
+			 print('Error: DAPI authentication failed')
+			 sys.exit(3)
+
+		try:
+			start_time = datetime.datetime.now()
+			# This also tests the ability to run a script.
+			print ('Deleting any pre-exising records...', flush=True, end='')
+			dapi.delete_all_records('DAPI')
+			print ('done')
+			print ('Creating new records...', flush=True, end='')
+			dapi.create_test_records('DAPI', 2000)
+			print ('done')
+			print ('Selecting a set of records...', flush=True, end='')
+			rec_list = dapi.select_records('DAPI','TextData','a')
+			print ('done')
+			print ('Updating a set of records...', flush=True, end='')
+	
+			#	def update_test_records (self, table: str, id_list: list, field: str, source_pattern: str, dest_pattern: str) -> str:
+			dapi.update_test_records('DAPI', rec_list, 'TextData', 'a', 'B')
+			print ('done')
+		except urllib.error.HTTPError as e:
+			print ('Error:', str (e))
+			sys.exit(3)
+		finally:
+			dapi.invalidate_token()
+			
+	else:
+		print ('Error: must specify both user and password for OData test file')
+		sys.exit(3)
+
+#
 #	t e s t _ o d a t a _ f u n c t i o n s
 #
 
 def test_odata_functions():
+	"""Test basic functionality of the OData API by creating, reading, and updating records in the API_Testing.fmp12 test file."""
 
 	if USER and PASSWORD:
 		odata = FileMakerODataAPI (username=USER, password=PASSWORD)
@@ -1207,7 +1252,6 @@ class FileCheckError(Exception):
 		return self.message
 
 
-
 #
 #	c l a s s  F i l e M a k e r A d m i n A P I
 #
@@ -1463,6 +1507,238 @@ class FileMakerAdminAPI:
 			print(f"Error invalidating token: {e}")
 			self.token = None
 
+#
+#
+#	c l a s s  F i l e M a k e r D a t a A P I
+#
+#
+
+class FileMakerDAPI:
+	"""Client for FileMaker Server Data API (DAPI) interface. Use with the API_Testing database and the provided test scripts/layouts for best results."""
+
+	def __init__(self, host='localhost', database='API_Testing', username='admin', password='apasswd'):
+		"""
+		Initialize the FileMaker Data API client.
+			host: FileMaker Server hostname (default: 'localhost')
+			database: Database name (without URL encoding)
+			username: Account username (default: 'admin')
+			password: Account password (default: 'admin')
+		"""
+		self.host = host
+		self.database = urllib.parse.quote(database)
+		self.username = username
+		self.password = password
+		self.token = None
+		self.base_url = f'https://{host}/fmi/data/vLatest/databases/{self.database}'
+
+		# Create SSL context that doesn't verify certificates (for localhost testing)
+		self.ssl_context = ssl.create_default_context()
+		self.ssl_context.check_hostname = False
+		self.ssl_context.verify_mode = ssl.CERT_NONE
+
+	def _make_request(self, endpoint, method='GET', data=None, use_basic_auth=False):
+		"""
+		Make an HTTP request to the FileMaker Data API.
+			endpoint: API endpoint path
+			method: HTTP method (GET, POST, PATCH, DELETE, etc.)
+			data: Request body data (dict)
+			use_basic_auth: Use Basic auth header instead of Bearer token
+
+		Returns:
+			Parsed JSON response
+		"""
+		url = f'{self.base_url}{endpoint}'
+
+		headers = {
+			'Content-Type': 'application/json'
+		}
+
+		if use_basic_auth:
+			credentials = f"{self.username}:{self.password}"
+			encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
+			headers['Authorization'] = f'Basic {encoded_credentials}'
+		elif self.token:
+			headers['Authorization'] = f'Bearer {self.token}'
+
+		request_data = None
+		if data is not None:
+			request_data = json.dumps(data).encode('utf-8')
+
+		print ('\nURL:', url)
+		print ('Method:', method)
+		print ('Headers:', headers)
+
+		request = urllib.request.Request(
+			url,
+			data=request_data,
+			headers=headers,
+			method=method
+		)
+
+		try:
+			response = urllib.request.urlopen(request, context=self.ssl_context)
+			response_data = response.read().decode('utf-8')
+
+			if response_data:
+				return json.loads(response_data)
+			return None
+
+		except urllib.error.HTTPError as e:
+			error_body = e.read().decode('utf-8')
+			print(f"HTTP Error {e.code}: {e.reason}")
+			print(f"Response: {error_body}")
+			raise
+		except urllib.error.URLError as e:
+			print(f"URL Error: {e.reason}")
+			raise
+
+	def authenticate(self) -> str:
+		"""
+		Authenticate to the FileMaker Data API and obtain an access token.
+		Returns authentication token, or None on failure.
+		"""
+		response = self._make_request('/sessions', method='POST', data={}, use_basic_auth=True)
+		if response and 'response' in response and 'token' in response['response']:
+			self.token = response['response']['token']
+			return self.token
+		return None
+
+	def invalidate_token(self):
+		"""
+		Invalidate the current authentication token (logout).
+		"""
+		if not self.token:
+			return
+
+		try:
+			self._make_request(f'/sessions/{self.token}', method='DELETE')
+			self.token = None
+		except Exception as e:
+			print(f"Error invalidating token: {e}")
+			self.token = None
+
+	def execute_script(self, laytout_name: str, script_name: str, parameter: str = None) -> str:
+		"""
+		Execute a FileMaker script via Data API.
+			laytout_name: Name of the layout to use for script execution context
+			script_name: Name of the script to execute
+			parameter: Optional parameter to pass to the script
+
+		Returns:
+			Script result as string
+		"""
+		endpoint = f'/layouts/{urllib.parse.quote(laytout_name)}/scripts/{urllib.parse.quote(script_name)}'
+		if parameter is not None:
+			endpoint += f'?script.param={urllib.parse.quote(str(parameter))}'
+
+		response = self._make_request(endpoint, method='GET', data={})
+		if response and 'response' in response:
+			return response['response'].get('scriptResult')
+		return None
+
+	def delete_all_records(self, table: str):
+		"""
+		Delete all records in named table by executing the 'api_delete_all_records' script.
+		"""
+		return self.execute_script('DAPI', 'api_delete_all_records', table)
+
+	def create_record(self, table: str, data: dict) -> str:
+		"""
+		Create a new record in the Data API layout.
+			table: Layout name
+			data: Dictionary of field names and values
+
+		Returns:
+			Record ID of the created record
+		"""
+		endpoint = f'/layouts/{urllib.parse.quote(table)}/records'
+		payload = {'fieldData': data}
+		response = self._make_request(endpoint, method='POST', data=payload)
+
+		if response and 'response' in response and 'recordId' in response['response']:
+			return response['response']['recordId']
+		return None
+
+	def create_test_records(self, table: str, count: int):
+		"""
+		Create multiple test records in the Data API layout.
+			count: Number of records to create
+		"""
+		for i in range(count):
+			data = {
+				'TextData': random_string(255),
+				'NumberData': random.randint(0, count),
+				'DateData': datetime.datetime.now().date().isoformat()
+			}
+			self.create_record(table, data)
+
+	def select_records(self, table: str, field: str, pattern: str) -> list:
+		"""
+		Select records from the Data API layout where field contains pattern.
+			table: Layout name
+			field: Field name to search
+			pattern: Substring pattern
+
+		Returns:
+			List of records from Data API response
+		"""
+		endpoint = f'/layouts/{urllib.parse.quote(table)}/_find'
+		payload = {
+			'query': [
+				{field: f'*{pattern}*'}
+			],
+			'limit': '1000'
+		}
+		response = self._make_request(endpoint, method='POST', data=payload)
+		if response and 'response' in response and 'data' in response['response']:
+			return response['response']['data']
+		return []
+
+	def update_record(self, table: str, id: str, field: str, value) -> dict:
+		"""
+		For the given record ID, update a field with a new value.
+			table: Layout name
+			id: Record ID
+			field: Field name to update
+			value: New value for the field
+
+		Returns:
+			Status of update operation
+		"""
+		endpoint = f'/layouts/{urllib.parse.quote(table)}/records/{id}'
+		payload = {'fieldData': {field: value}}
+		response = self._make_request(endpoint, method='PATCH', data=payload)
+		if response and 'response' in response:
+			return response['response']
+		return {}
+
+	def update_test_records(self, table: str, records: list, field: str, source_pattern: str, dest_pattern: str) -> int:
+		"""
+		Update records in the Data API layout where field matches source_pattern,
+		replacing with dest_pattern in that same field.
+
+		Returns:
+			Number of records updated
+		"""
+		updated_count = 0
+
+		for record in records:
+			field_data = record.get('fieldData', {})
+			record_id = record.get('recordId')
+
+			if not record_id or field not in field_data:
+				continue
+
+			original_value = str(field_data[field])
+			updated_value = original_value.replace(source_pattern, dest_pattern)
+
+			if updated_value != original_value:
+				self.update_record(table, record_id, field, updated_value)
+				updated_count += 1
+
+		return updated_count
+
+# End of FileMakerDataAPI class
 
 #
 #
@@ -1681,6 +1957,7 @@ class FileMakerODataAPI:
 		
 		return updated_count
 
+# end FileMakerODataAPI
 
 #
 #	f i n d _ f i r s t _ t i m e s t a m p
@@ -2264,6 +2541,7 @@ def init_parser() -> argparse.ArgumentParser:
 	parser.add_argument('--stop-fms', action='store_true', help='stop the FileMaker Server service')
 	parser.add_argument('-t', dest='tail', action='store_true', help='wait for any new messages')
 	parser.add_argument('--tail', dest='tail', type=float, nargs=1, default=[-1.0], help='wait for any new messages, specifying number of seconds to wait for each file')
+	parser.add_argument('--test-dapi', action='store_true', help='extended Data API (DAPI) checks; requires API_Testing file')
 	parser.add_argument('--test-odata', action='store_true', help='extended OData API checks; requires API_Testing file')
 	parser.add_argument('--truncate', action='store_true', help='cut off any output if beyond width of screen')
 	parser.add_argument('-u', '--user', help='FMS console or SSH account name')
@@ -3898,6 +4176,10 @@ def handle_named_options (args) -> bool:
 
 	if args.stop_fms:
 		manage_fms_service('stop')
+		ignore_positionals = True
+
+	if args.test_dapi:
+		test_dapi_functions()
 		ignore_positionals = True
 
 	if args.test_odata:
