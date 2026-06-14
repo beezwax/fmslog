@@ -79,11 +79,17 @@ def get_fms_version() -> str:
 #
 
 def get_log_path (log: str) -> str:
+	"""
+	Fetch path for the given log name. If a wildcard is used,
+	locate the matching file. Returns None if an unknown log name or
+	if a file matching wildcard is not found.
+	"""
 	# TODO: convert Windows paths
 	#print ('log_path', LOG_PATHS [log])
 	try:
 		pathSuffix = LOG_SPECS [log]['path']
 	except KeyError:
+		print (f'Error: {log} is an invalid log name')
 		return None
 
 	if pathSuffix[0] == '!':
@@ -100,6 +106,7 @@ def get_log_path (log: str) -> str:
 			full_path = path_list[0]
 		else:
 			full_path = None
+			print (f'Error: no log file present for {log}')
 	
 	return full_path
 
@@ -232,7 +239,6 @@ LOG_SPECS_BASE = {
 				  'TIMESTAMP                      IN         OUT        COMPLETE   IN PROG    ELAPSED    WAIT       I/O        CLIENT NAME',
 		'tbst': [31,42,53,64,75,86,97,108],
 	},
-
 
 	'clientstats': {
 		'path': 'Logs/ClientStats.log',
@@ -824,6 +830,8 @@ def check_file_validity (path: str):
 	Check whether the a given file exists, readable and is a file.
 	Return None if no issue found, otherwise return an error message.
 	'''
+	if not path:
+		raise FileCheckError ('bad path value')
 	if not os.access(path, os.F_OK):
 		raise FileCheckError (f"'{path}' does not exist")
 	if not os.access(path, os.R_OK):
@@ -1150,7 +1158,7 @@ def edit_log (log_name: str):
 	# Below will return None if syslog or glob can't find file.
 	log_path = get_log_path (log_name)
 	exit_code = 0
-	
+
 	if log_path:
 		if 'EDITOR' in os.environ:
 			exit_code = subprocess.call ('$EDITOR "' + log_path + '"', shell=True)
@@ -3410,17 +3418,20 @@ def print_file_head_faster (file_path: str, lines: int) -> bool:
 #   p r i n t _ h e a d
 #
 
-def print_head (log_name: str, count: int, header: bool, succinct: bool) -> bool:
+def print_head (log_name: str, count: int, header: bool, succinct: bool) -> int:
     
 	line_list = []
 	line_counter = count
 	log_path =  get_log_path (log_name)
 	
+	if not log_path:
+		return -1
+
 	try:
 		check_file_validity (log_path)
 	except FileCheckError as e:
 		print ('Error:', e)
-		return -1
+		return -2
 	
 	# First, find first line containing some kind of message date
 	# that is on or after our start date.
@@ -3542,11 +3553,14 @@ def print_tail (log_name: str, count: int, header: bool, succinct: bool) -> int:
 
 	log_path =  get_log_path (log_name)
 
+	if not log_path:
+		return -1
+
 	try:
 		check_file_validity (log_path)
 	except FileCheckError as e:
 		print ('Error:', e)
-		return -1
+		return -2
 
 	# TODO: only print headers if there's log output
 	if header:
@@ -4034,6 +4048,8 @@ class TailPrint:
 		
 		for log in log_names:
 			path = get_log_path (log)
+			if not path:
+				sys.exit (-1)
 			self.check_file_validity(path)
 			self.log_names.append (log)
 			self.log_paths.append (path)
