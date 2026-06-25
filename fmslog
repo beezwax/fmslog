@@ -2827,10 +2827,13 @@ def print_backup_info():
 		print ()
 		print ('{:>11}  {:>16}  {:>16}  {}'.format ('FILES', 'SIZE', 'H/L SIZE', 'PATH'))
 		prog_dirs = get_subfolder_names (progressives_path)
-		for dir in prog_dirs:
-			full_path = os.path.join (progressives_path, dir)
-			size,file_count,hl_size = get_folder_stats(full_path)
-			print(f'{file_count:11,}  {size:>16,}  {hl_size:>16,}  {dir}')
+		if prog_dirs:
+			for dir in prog_dirs:
+				full_path = os.path.join (progressives_path, dir)
+				size,file_count,hl_size = get_folder_stats(full_path)
+				print(f'{file_count:11,}  {size:>16,}  {hl_size:>16,}  {dir}')
+		else:
+			print_error ('Directory missing')
 	else:
 		print ('Not defined')
 	print()
@@ -3533,8 +3536,9 @@ def print_standby_info():
 
 	standby_size,file_count,hl_size = get_folder_stats (standby_path)
 	# Any point in displaying if has hard links?
-	print (f'{file_count:11,}  {standby_size:16,}                    {standby_path}')
-
+	if standby_size > -1: # skip if Standby dir missing (new to FMS 26)
+		path_label = 'Standby Data'
+		print (f'{path_label:24}  {file_count:11,}  {standby_size:16,}                    {standby_path}')
 
 #
 #	p r i n t _ t a i l
