@@ -849,7 +849,6 @@ def test_dapi_functions():
 	if USER and PASSWORD:
 		dapi = FileMakerDAPI (username=USER, password=PASSWORD)
 		if not dapi.authenticate():
-			 print('Error: DAPI authentication failed')
 			 sys.exit(3)
 
 		try:
@@ -1572,9 +1571,9 @@ class FileMakerDAPI:
 		if data is not None:
 			request_data = json.dumps(data).encode('utf-8')
 
-		print ('\nURL:', url)
-		print ('Method:', method)
-		print ('Headers:', headers)
+		#print ('\nURL:', url)
+		#print ('Method:', method)
+		#print ('Headers:', headers)
 
 		request = urllib.request.Request(
 			url,
@@ -1605,11 +1604,15 @@ class FileMakerDAPI:
 		Authenticate to the FileMaker Data API and obtain an access token.
 		Returns authentication token, or None on failure.
 		"""
-		response = self._make_request('/sessions', method='POST', data={}, use_basic_auth=True)
-		if response and 'response' in response and 'token' in response['response']:
-			self.token = response['response']['token']
-			return self.token
-		return None
+		try:
+			response = self._make_request('/sessions', method='POST', data={}, use_basic_auth=True)
+			if response and 'response' in response and 'token' in response['response']:
+				self.token = response['response']['token']
+				return self.token
+			return None
+		except Exception as e:
+			print(f"Error: {e}")
+			self.token = None
 
 	def invalidate_token(self):
 		"""
@@ -1635,7 +1638,7 @@ class FileMakerDAPI:
 		Returns:
 			Script result as string
 		"""
-		endpoint = f'/layouts/{urllib.parse.quote(laytout_name)}/scripts/{urllib.parse.quote(script_name)}'
+		endpoint = f'/layouts/{urllib.parse.quote(laytout_name)}/script/{urllib.parse.quote(script_name)}'
 		if parameter is not None:
 			endpoint += f'?script.param={urllib.parse.quote(str(parameter))}'
 
@@ -1676,7 +1679,7 @@ class FileMakerDAPI:
 			data = {
 				'TextData': random_string(255),
 				'NumberData': random.randint(0, count),
-				'DateData': datetime.datetime.now().date().isoformat()
+				'DateData': datetime.datetime.now().strftime('%m/%d/%Y')
 			}
 			self.create_record(table, data)
 
