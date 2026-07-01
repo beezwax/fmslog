@@ -78,6 +78,7 @@ options:
   --stop-fms                stop the FileMaker Server service
   -s, --succinct            strip less useful details from log output (partially implemented)
   -t, --tail                wait for any new messages after printing current end of log
+  --test-dapi				perform various operations using the Data API; requires the API_Testing file to be hosted on the server
   --test-odata				perform various operations using the OData API; requires the API_Testing file to be hosted on the server
   --truncate                cut off any output if beyond width of screen
   -V, --version             version info for fmslog and FMS components
