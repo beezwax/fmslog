@@ -36,14 +36,14 @@ Current functionality with major issues:
 
 ## REQUIREMENTS & INSTALLATION
 
-Requires Python 3.9 or newer. Only the standard Python library modules are used, so no additional installs should be needed.
+Requires Python 3.9 or newer. Only the standard (built-in) Python library modules are used.
 
 Copy the latest version of the `fmslog` file to a directory in user's command PATH:
 
 * macOS: `sudo curl -o /usr/local/bin/fmslog https://raw.githubusercontent.com/beezwax/fmslog/refs/heads/main/fmslog && sudo chmod +x /usr/local/bin/fmslog`
 * Ubuntu: `sudo curl -o /usr/bin/fmslog https://raw.githubusercontent.com/beezwax/fmslog/refs/heads/main/fmslog && sudo chmod +x /usr/bin/fmslog`
 
-For the above commandd on macOS, you may need to create the `/usr/local/bin` directory if FileMaker Server is not yet installed.
+For the above command on macOS, you will need to create the `/usr/local/bin` directory if FileMaker Server is not yet installed.
 
 ---
 
