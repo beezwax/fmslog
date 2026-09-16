@@ -7,7 +7,7 @@ Author: Simon Brown on 10/15/2025
 Purpose: Display FileMaker Server logs, change logging options, and get resource usage.
 """
 
-VERSION = "0.56 - 2026-08-25"
+VERSION = "0.57 - 2026-09-15"
 
 # Only using standard library modules.
 
@@ -1905,9 +1905,12 @@ class FileMakerODataAPI:
 		"""
 		endpoint = '/' + urllib.parse.quote(table)
 		response = self._make_ppp_request(endpoint, method='POST', data=data)
-		
-		if response and 'recordId' in response:
-			return response['recordId']
+				
+		if response:
+			if '@id' in response:
+				return response['@id']
+			elif 'recordId' in response:
+				return response['recordId']
 		return None
 	
 	def create_test_records(self, table: str, count: int):
