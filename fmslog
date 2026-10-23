@@ -7,7 +7,7 @@ Author: Simon Brown on 10/15/2025
 Purpose: Display FileMaker Server logs, change logging options, and get resource usage.
 """
 
-VERSION = "0.57 - 2026-09-15"
+VERSION = "0.58 - 2026-10-22"
 
 # Only using standard library modules.
 
@@ -200,7 +200,8 @@ LOG_SPECS_BASE = {
 		'lghd': True,
 		#        ----------1---------2---------3---------4---------5---------6---------7---------8---------9---------0---------
 		#        2025-09-15 01:12:45.831 -0700  Information  228   some-dev.filemaker.beezwax.net         The previous log file reached maximum size, and was renamed to "Access-old.log".
-		'head': 'TIMESTAMP                       LEVEL        CODE  HOST                                  MESSAGE',
+		'head': 'Access.log\n' + \
+				'TIMESTAMP                       LEVEL        CODE  HOST                                  MESSAGE',
 		'tbst': [32,45,51,89],
 		#        2025-09-15 01:12:45.831  Information  228   The previous log file reached maximum size, and was renamed to "Access-old.log".
 		'shed': 'TIMESTAMP                LEVEL        CODE  MESSAGE',
@@ -213,19 +214,21 @@ LOG_SPECS_BASE = {
 		#			2022-05-17 14:29:56 -0700  Execute /opt/FileMaker/FileMaker Server/Admin/FAC/facstart.sh
 		#			2022-05-17 14:30:00 -0700 - error:  fmi   127.0.0.1   notifications  general   n/a   "New system notification generated, type: CPU_USAGE_EXCEED_HARD_LIMIT"
 		# Only uses tabs with regular messages (eg, not error or warn) after timestamp.
-		'head': 'TIMESTAMP                   LEVEL  ENDP  ADDRESS     COMPONENT      TYPE      CODE  MESSAGE',
+		'head': 'fac.log\n' + \
+				'TIMESTAMP                   LEVEL  ENDP  ADDRESS     COMPONENT      TYPE      CODE  MESSAGE',
 		'tbst': [35,41,53,68,78,84],
 		'shed': 'TIMESTAMP           {LEVEL}   {END} {ADDRESS}   {COMPONENT}    {TYPE}    {CODE}  MESSAGE',
 		'shtb': [23]
 	},
 	'adminapi': {
 		'path': 'Admin/FAC/logs/fac1.log',
-		'lghd': False,
+		'lghd': True,
 		#        ----------1---------2---------3---------4---------5---------6---------7---------8---------9---------0---------
 		#			2022-05-24 14:04:30 -0700 - error:   fmi   127.0.0.1   fmsadminapi   general   3   "Get worker list failed."
 		#			2022-05-24 19:32:51 -0700       Execute /opt/FileMaker/FileMaker Server/Admin/FAC/facstart.sh
 		# Only uses tab after timestamp with regular messages (eg, not error or warn)
-		'head': 'TIMESTAMP                   LEVEL  ENDP  ADDRESS     COMPONENT      TYPE      CODE  MESSAGE',
+		'head': 'fac1.log\n' + \
+				'TIMESTAMP                   LEVEL  ENDP  ADDRESS     COMPONENT      TYPE      CODE  MESSAGE',
 		'tbst': [35,41,53,68,78,84],
 		'shed': 'TIMESTAMP           {LEVEL}   {END} {ADDRESS}   {COMPONENT}    {TYPE}    {CODE}  MESSAGE',
 		'shtb': [23]
@@ -238,7 +241,7 @@ LOG_SPECS_BASE = {
 		#        09-Dec-2025 09:31:08.332 WARNING [main] org.apache.tomcat.util.digester.SetPropertiesRule.begin Match [Server/Listener] failed to set property [AWTThreadProtection] to [true]
 		#			will also include backtraces
 		'head': 'Catalina.*.log                 NET BYTES  NET BYTES  CALLS      CALLS      TIME       TIME       TIME\n' + \
-				  'TIMESTAMP                      IN         OUT        COMPLETE   IN PROG    ELAPSED    WAIT       I/O        CLIENT NAME',
+				'TIMESTAMP                      IN         OUT        COMPLETE   IN PROG    ELAPSED    WAIT       I/O        CLIENT NAME',
 		'tbst': [31,42,53,64,75,86,97,108],
 	},
 
@@ -248,11 +251,11 @@ LOG_SPECS_BASE = {
 		#        ----------1---------2---------3---------4---------5---------6---------7---------8---------9---------0---------
 		#			2025-10-16 15:46:18.054 -0700  37781   8559   209   0     46442     0    28    Xeronthia Shilnow (XS ETMD6M) [255.143.244.179]
 		'head': 'ClientStats.log                NET BYTES  NET BYTES  CALLS      CALLS      TIME       TIME       TIME\n' + \
-				  'TIMESTAMP                      IN         OUT        COMPLETE   IN PROG    ELAPSED    WAIT       I/O        CLIENT NAME',
+				'TIMESTAMP                      IN         OUT        COMPLETE   IN PROG    ELAPSED    WAIT       I/O        CLIENT NAME',
 		'tbst': [31,42,53,64,75,86,97,108],
 		#			2025-10-16 15:46:18.054  37781    8559    209     0    46442    0     28   Xeronthia Shilnow (XS ETMD6M) [255.143.144.79]
 		'shed': 'ClientStats.log                     NET BYTES  NET BYTES CALLS     CALLS     TIME      TIME      TIME\n' + \
-				  'TIMESTAMP                IN         OUT       COMPLETE  IN PROG   ELAPSED   WAIT      I/O       CLIENT NAME',
+				'TIMESTAMP                IN         OUT       COMPLETE  IN PROG   ELAPSED   WAIT      I/O       CLIENT NAME',
 		'shtb': [26,37,48,59,70,81,92,103]
 	},
 	
@@ -262,7 +265,8 @@ LOG_SPECS_BASE = {
 		#        ----------1---------2---------3---------4---------5---------6---------7---------8---------9---------0---------
 		#			2025-08-27 11:08:10.055 -0700  4101   ERROR	250.130.228.236  some-user-name   POST  Script Error -- Script File: 'filename', Script Name: 'create update topic [PSoS]', Script Step: 'Set Field By Name'  0
 		# Size at end (re-arrange columns?). Rarely a 4 digit error code.
-		'head': 'TIMESTAMP	                CODE   LEVEL   HOST            USER              HTTP  MESSAGE  SIZE',
+		'head': 'fmdapi.log\n' + \
+				'TIMESTAMP	                CODE   LEVEL   HOST            USER              HTTP  MESSAGE  SIZE',
 		'tbst': [32,39,47,63,81,87],
 		#			2025-08-27 11:08:10.055  301   ERROR  some-user-name   POST  Script Error -- Script File: 'Tool', Script Name: 'create update topic [PSoS]', Script Step: 'Set Field By Name'  0
 		'shed': 'TIMESTAMP	             CODE  LEVEL  USER             HTTP  MESSAGE  SIZE',
@@ -274,7 +278,8 @@ LOG_SPECS_BASE = {
 		'lghd': True,
 		#        ---------1---------2---------3---------4---------5---------6---------7---------8---------9---------0---------
 		#			2025-08-18 23:15:30.125 -0700  Information  228   some-dev.filemaker.beezwax.net  The previous log file reached maximum size, and was renamed to "Event-old.log".
-		'head': 'TIMESTAMP                ZONE  LEVEL        CODE  HOST                          MESSAGE',
+		'head': 'Event.log' + \
+				'TIMESTAMP                ZONE  LEVEL        CODE  HOST                          MESSAGE',
 		'tbst': [31,44,50,80],
 		#			2025-08-18 23:15:30.125  Information  228   some-dev.filemaker.beezwax.net  The previous log file reached maximum size, and was renamed to "Event-old.log".
 		'shed': 'TIMESTAMP                LEVEL        CODE  MESSAGE',
@@ -283,43 +288,43 @@ LOG_SPECS_BASE = {
 	
 	'fmsadmindebug': {
 		'path': 'Database Server/bin/fmsadminDebug.log',
-		'lghd': False,
-		'head': None,
+		'lghd': True,
+		'head': 'fmsadminDebug.log',
 		'tbst': 8
 	},
 	
 	'fmsasedebug': {
 		'path': 'Database Server/bin/fmsaseDebug.log',
-		'lghd': False,
-		'head': None,
+		'lghd': True,
+		'head': 'fmsaseDebug.log',
 		'tbst': 8
 	},
 	
 	'fmscwpc': {
 		'path': 'Database Server/bin/fmscwpc.log',
-		'lghd': False,
-		'head': None,
+		'lghd': True,
+		'head': 'fmscwpc.log',
 		'tbst': 8
 	},
 	
 	'fmscwpcli': {
 		'path': 'Database Server/bin/fmscwpcli.log',
-		'lghd': False,
-		'head': None,
+		'lghd': True,
+		'head': 'fmscwpcli.log',
 		'tbst': 8
 	},
 
 	'fmsgetpasskeydebug': {
 		'path': 'Database Server/bin/fmsgetpasskeyDebug.log',
-		'lghd': False,
-		'head': None,
+		'lghd': True,
+		'head': 'fmsgetpasskeyDebug.log',
 		'tbst': 8
 	},
 	
 	'fmsdebug': {
 		'path': 'Database Server/bin/fmsDebug.log',
-		'lghd': False,
-		'head': None,
+		'lghd': True,
+		'head': 'fmsDebug.log',
 		'tbst': 8
 	},
 	
@@ -328,34 +333,35 @@ LOG_SPECS_BASE = {
 		'lghd': True,
 			#		2024-10-21 09:55:47.101 -0700 [HelperApp] Debug::DumpBitSettings() feature(s) enabled: [ AlwaysPrint | Assert | ForceOutput | Backup | UploadDownload | Server | ServerCommands | ServerComponents | ServerDependencies | FMSECLI | NotificationsStackCrawls | Anchors | BPlusTree | FileBox | LicenseServer | CalcEngine | Add-ons | OData | TransactSupport | AdminAPI | CertVerify | CurrentThread | Consolidator | DownloadService | WIP | EditOtherClientLayout | CLI | ThreadedSorting | DisableServerSideSorting | DisableMemoryKeyCmpIndexing | PurgeTempDB | DisableSharingLockOnServer | PersistentData | DisableServerSideSummary | SupportNestedPSOS ]
 			#		2024-10-21 09:55:47.117 -0700 [HelperApp] AdminMgrConfigFile() installation directory = /opt/FileMaker/FileMaker Server/, config file = Admin/conf/deployment.xml, encrypted = false
-		'head': None,
+		'head': 'fmshDebug.log',
 		'tbst': 8	# replace any tabs with two spaces
 	},
 	
 	'fmsibdebug': {
 		'path': 'Database Server/bin/fmsibDebug.log',
-		'lghd': False,
-		'head': None,
+		'lghd': True,
+		'head': 'fmsibDebug.log',
 		'tbst': 8
 	},
 	
 	'fmslogdebug': {
 		'path': 'Database Server/bin/fmslogDebug.log',
-		'lghd': False,
-		'head': None,
+		'lghd': True,
+		'head': 'fmslogDebug.log',
 		'tbst': 8
 	},
 	
 	'fmwipd': {
 		'path': 'Database Server/bin/fmwipd.log',
-		'lghd': False,
+		'lghd': True,
+		'head': 'fmwipd.log',
 		'tbst': 8
 	},
 
 	'loadschedules': {
 		'path': 'Logs/LoadSchedules.log',
 		'lghd': True,
-		'head': None,
+		'head': 'LoadSchedules.log',
 		'tbst': 8
 	},
 
@@ -364,7 +370,8 @@ LOG_SPECS_BASE = {
 		'lghd': True,
 		#        ---------1---------2---------3---------4---------5---------6---------7---------8---------9---------0---------
 		#		  '2025-10-14T13:01:31.232452-08:00  0     INFO   170.255.255.218   GET   /fmi/odata/v4	 75'
-		'head': 'TIMESTAMP                         CODE  LEVEL  HOST                 OP      ENDPOINT               SIZE',
+		'head': 'fmodata.log\n' + \
+				'TIMESTAMP                         CODE  LEVEL  HOST                 OP      ENDPOINT               SIZE',
 		'tbst': [34,40,47,66,68,76,99],  # 'size' value will be padded on end
 		#		  '2025-10-14T13:01:31.232452  0     INFO   GET   /fmi/odata/v4	 75'
 		'shed': 'TIMESTAMP                   CODE  LEVEL  OP    ENDPOINT  SIZE',
@@ -373,16 +380,18 @@ LOG_SPECS_BASE = {
 	
 	'odatadebug': {
 		'path': 'Database Server/bin/fmodataDebug.log',
-		'lghd': False,
+		'lghd': True,
+		'head': 'fmodataDebug.log',
 		'tbst': 8
 	},
 	
 	'scriptevent': {
 		'path': 'Logs/scriptEvent.log',
-		'lghd': False,
+		'lghd': True,
 		#        ---------1---------2---------3---------4---------5---------6---------7---------8---------9---------0---------
 		#			2025-08-11 03:00:26.470 -0700  401   Schedule "daily mailing" scripting error (401) at "TOOL : delete mailing batches without queued logs [PSoS] : 22 : Perform Find".
-		'head': 'TIMESTAMP                ZONE  CODE  MESSAGE',
+		'head': 'scriptEvent.log\n' + \
+				'TIMESTAMP                ZONE  CODE  MESSAGE',
 		'tbst': [31,37],
 		#			2025-08-11 03:00:26.470  401   Schedule "daily mailing" scripting error (401) at "TOOL : delete mailing batches without queued logs [PSoS] : 22 : Perform Find".
 		'shtb': [26,32],
@@ -394,10 +403,10 @@ LOG_SPECS_BASE = {
 		#			---------1---------2---------3---------4---------5---------6---------7---------8---------9---------0---------1---------2---------3---------4---------5---------6---------7---------8---------
 		#			2025-10-17 17:54:42.335 -0700	0	14	11	0	98	0	0	1	0	0	0	2	0	546	40	81	0
 		'head': 'Stats.log                      NET      NET       DISK       DISK       CACHE   CACHE     CLIENTS  OPEN  CLIENTS  CLIENTS  CLIENTS  CALLS/s   CALLS   TIME     TIME     TIME     CLIENTS\n' + \
-				  'TIMESTAMP                ZONE  KBs IN   KBs OUT   KBs READ   KBs WRITE  HIT %   UNSAVD %  PRO      DBS   XDBC     WEBD     CWP      COMPLETE  ACTIVE  ELAPSED  WAIT     I/O      GO',
+				'TIMESTAMP                ZONE  KBs IN   KBs OUT   KBs READ   KBs WRITE  HIT %   UNSAVD %  PRO      DBS   XDBC     WEBD     CWP      COMPLETE  ACTIVE  ELAPSED  WAIT     I/O      GO',
 		'tbst': [31,40,50,61,72,80,90,99,105,114,123,132,142,150,159,168,177],
 		'shed': 'Stats.log                NET      NET       DISK       DISK        CACHE   CACHE     PRO      OPEN  CLIENTS  CLIENTS  CLIENTS  CALLS/s   CALLS   TIME     TIME     TIME     CLIENTS\n' + \
-				  'TIMESTAMP                KB/s In  KB/s OUT  KB/s READ  KB/s WRITE  HIT %   UNSAVD %  CLIENTS  DBS   XDBC     WEBD     CWP      COMPLETE  ACTIVE  ELAPSED  WAIT     I/O      GO',
+				'TIMESTAMP                KB/s In  KB/s OUT  KB/s READ  KB/s WRITE  HIT %   UNSAVD %  CLIENTS  DBS   XDBC     WEBD     CWP      COMPLETE  ACTIVE  ELAPSED  WAIT     I/O      GO',
 		'shtb': [26,35,45,56,68,76,86,95,101,110,119,128,138,146,155,164,173]
 	},
 
@@ -407,7 +416,7 @@ LOG_SPECS_BASE = {
 		#        ---------1---------2---------3---------4---------5---------6---------7---------8---------9---------0---------1---------2---------3---------4---------5---------6---------7---------8---------9---------0---------
 		#			2025-10-31 22:12:31.419 -0700   166630.877193  166635.541004  4663811   Query (Find)                     Tool::table(181)::field definitions(356)     509        33         4663811    0        235659   tool-beezwax-net (172.30.8.236) [172.30.8.236]
 		'head': 'TopCallStats.log               TIME           TIME           TOTAL                                                                                    NET BYTES  NET BYTES  TIME       TIME     TIME\n' + \
-				  'TIMESTAMP                      START          END            ELAPSED   OPERATION                         TARGET                                       IN         OUT        ELAPSED    WAIT     I/O       CLIENT NAME',
+				'TIMESTAMP                      START          END            ELAPSED   OPERATION                         TARGET                                       IN         OUT        ELAPSED    WAIT     I/O       CLIENT NAME',
 		'tbst': [31,46,61,71,105,150,161,172,183,192,202],
 		'shed': 'TIMESTAMP                 Start T.  End T.  Total Elapsed  Operation         Target  Net Bytes In  Net Bytes Out  Elapsed T.  Wait T.  I/O T.  Client name',
 	},
@@ -415,7 +424,7 @@ LOG_SPECS_BASE = {
 	'trimlog': {
 		'path': 'Database Server/bin/trimlog.log',
 		'lghd': True,
-		'head': None,
+		'head': 'trimlog.log',
 		'tbst': 8
 	},
 
@@ -432,14 +441,15 @@ LOG_SPECS_BASE = {
 
 	'wpedebug': {
 		'path': 'Logs/wpe_debug.log',
-		'lghd': False,
+		'lghd': True,
+		'head': 'wpe_debug.log',
 		'tbst': 8
 	},
 	
 	'xdbc': {
 		'path': 'Database Server/bin/xdbc.log',
 		'lghd': True,
-		'head': None,
+		'head': 'xdbc.log',
 		'tbst': 8
 	}
 }
@@ -447,26 +457,26 @@ LOG_SPECS_BASE = {
 LOG_SPECS_DARWIN = {
 	'install': {
 		'path': 'Logs/install.log',
-		'lghd': False,
-		'head': None,
+		'lghd': True,
+		'head': 'install.log',
 		'tbst': 8
 	},
 	'syslog': {
 		'path': '!/usr/bin/log',
-		'lghd': False,
-		'head': None,
+		'lghd': True,
+		'head': 'syslog',
 		'tbst': 8
 	},
 	'stderr': {
 		'path': 'Logs/stderr',
-		'lghd': False,
-		'head': None,
+		'lghd': True,
+		'head': 'stderr',
 		'tbst': 8
 	},
 	'stdout': {
 		'path': 'Logs/stdout',
-		'lghd': False,
-		'head': None,
+		'lghd': True,
+		'head': 'stdout',
 		'tbst': 8
 	},
 }
@@ -500,19 +510,19 @@ LOG_SPECS_LINUX = {
 	'nginxerror': {
 		'path': 'NginxServer/logs/nginx-error.log',
 		'lghd': True,  
-		'head': None,
+		'head': 'nginx-error.log',
 		'tbst': 8
 	},
 	'stderrserverscripting': {
 		'path': 'Logs/StdErrServerScripting.log',
-		'lghd': False,
-		'head': None,
+		'lghd': True,
+		'head': 'StdErrServerScripting.log',
 		'tbst': 8
 	},
 	'stdoutserverscripting': {
 		'path': 'Logs/StdOutServerScripting.log',
-		'lghd': False,
-		'head': None,
+		'lghd': True,
+		'head': 'StdOutServerScripting.log',
 		'tbst': 8
 	},
 }
@@ -522,49 +532,53 @@ LOG_SPECS_APACHE = {
 		'path': 'HTTPServer/logs/access_log.*',
 		'lghd': True,
 		#        [04/Nov/2025:09:48:53 -0800] 127.0.0.1 TLSv1.2 ECDHE-RSA-AES128-GCM-SHA256 "GET /fmi/mwpew/wpe/prefs HTTP/1.1" 384
-		'head': 'REQUESTER        STATUS  LENGTH  IDENTITY      USER          TIMESTAMP                   MESSAGE',
+		'head': 'access_log\n' + \
+				'REQUESTER        STATUS  LENGTH  IDENTITY      USER          TIMESTAMP                   MESSAGE',
 		'tbst': [              17,     25,   33,             47,           61,                          89]
 	},
 	'httpdctlerr': {
 		'path': 'HTTPServer/logs/httpdctl.err',
-		'lghd': False,
-		#        [04/Nov/2025:09:48:53 -0800] 127.0.0.1 TLSv1.2 ECDHE-RSA-AES128-GCM-SHA256 "GET /fmi/mwpew/wpe/prefs HTTP/1.1" 384
-		'head': 'TIMESTAMP                    HOST      VERSION CIPHER                      OP   PATH',
+		'lghd': True,
+		'head': 'httpdctl.err',
 		'tbst': 8
 	},
 	'httpdctlout': {
 		'path': 'HTTPServer/logs/httpdctl.out',
-		'lghd': False,
+		'lghd': True,
 		#        [04/Nov/2025:09:48:53 -0800] 127.0.0.1 TLSv1.2 ECDHE-RSA-AES128-GCM-SHA256 "GET /fmi/mwpew/wpe/prefs HTTP/1.1" 384
-		'head': 'TIMESTAMP                    HOST      VERSION CIPHER                      OP   PATH',
+		'head': 'httpdctl.out',
 		'tbst': 8
 	},
 	'httperror': {
 		'path': 'HTTPServer/logs/error_log.*',
-		'lghd': False,
+		'lghd': True,
 		#        [04/Nov/2025:09:48:53 -0800] 127.0.0.1 TLSv1.2 ECDHE-RSA-AES128-GCM-SHA256 "GET /fmi/mwpew/wpe/prefs HTTP/1.1" 384
-		'head': 'TIMESTAMP                    HOST      VERSION CIPHER                      OP   PATH',
+		'head': 'error_log.*\n' + \
+				'TIMESTAMP                    HOST      VERSION CIPHER                      OP   PATH',
 		'tbst': 8
 	},
 	'httpsslaccess': {
 		'path': 'HTTPServer/logs/ssl_access_log.*',
 		'lghd': True,
 		#        [04/Nov/2025:09:48:53 -0800] 127.0.0.1 TLSv1.2 ECDHE-RSA-AES128-GCM-SHA256 "GET /fmi/mwpew/wpe/prefs HTTP/1.1" 384
-		'head': 'REQUESTER        STATUS  LENGTH  IDENTITY      USER          TIMESTAMP                   MESSAGE',
+		'head': 'ssl_access_log.*\n' + \
+				'REQUESTER        STATUS  LENGTH  IDENTITY      USER          TIMESTAMP                   MESSAGE',
 		'tbst': [              17,     25,   33,             47,           61,                          89]
 	},
 	'httpsslerror': {
 		'path': 'HTTPServer/logs/ssl_error_log.*',
-		'lghd': False,
+		'lghd': True,
 		#        [04/Nov/2025:09:48:53 -0800] 127.0.0.1 TLSv1.2 ECDHE-RSA-AES128-GCM-SHA256 "GET /fmi/mwpew/wpe/prefs HTTP/1.1" 384
-		'head': 'TIMESTAMP                    HOST      VERSION CIPHER                      OP   PATH',
+		'head': 'ssl_error_log.*\n' + \
+				'TIMESTAMP                    HOST      VERSION CIPHER                      OP   PATH',
 		'tbst': 8
 	},
 	'httpsslrequest': {
 		'path': 'HTTPServer/logs/ssl_request_log.*',
-		'lghd': False,
+		'lghd': True,
 		#        [04/Nov/2025:09:48:53 -0800] 127.0.0.1 TLSv1.2 ECDHE-RSA-AES128-GCM-SHA256 "GET /fmi/mwpew/wpe/prefs HTTP/1.1" 384
-		'head': 'TIMESTAMP                    HOST             VERSION  CIPHER                        OP   PATH',
+		'head': 'ssl_request_log.*\n' + \
+				'TIMESTAMP                    HOST             VERSION  CIPHER                        OP   PATH',
 		'tbst': [                          29,              46,      55,                           85,                      99]
 	}
 }
