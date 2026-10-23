@@ -278,7 +278,7 @@ LOG_SPECS_BASE = {
 		'lghd': True,
 		#        ---------1---------2---------3---------4---------5---------6---------7---------8---------9---------0---------
 		#			2025-08-18 23:15:30.125 -0700  Information  228   some-dev.filemaker.beezwax.net  The previous log file reached maximum size, and was renamed to "Event-old.log".
-		'head': 'Event.log' + \
+		'head': 'Event.log\n' + \
 				'TIMESTAMP                ZONE  LEVEL        CODE  HOST                          MESSAGE',
 		'tbst': [31,44,50,80],
 		#			2025-08-18 23:15:30.125  Information  228   some-dev.filemaker.beezwax.net  The previous log file reached maximum size, and was renamed to "Event-old.log".
@@ -659,8 +659,8 @@ def calc_row_metrics (num_logs, log_lines_count_val) -> tuple:
 		screens_num_str = log_lines_count_val.replace('s','')
 		num_mode = 's'
 
-		if len (screens_num_str) == 0:
-			screens_num = 1		# just an 's' by itself counts as 1'
+		screens_num = 1		# just an 's' by itself counts as 1'
+		
 		try:
 			screens_num = int (screens_num_str)
 		except ValueError:
@@ -1829,17 +1829,12 @@ class FileMakerODataAPI:
 		"""
 		url = f'{self.base_url}{endpoint}'
 		#print ('url:', url)
-		
-		# Prepare headers
-		headers = {
-			'Content-Type': 'application/json'
-		}
 	
 		# Create credentials string
 		credentials = f"{self.username}:{self.password}"
 		encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
 
-		# Create request with basic auth
+		# Create request header with basic auth
 		headers = {
 			'Content-Type': 'application/json',
 			'Authorization': f'Basic {encoded_credentials}'
@@ -3190,7 +3185,7 @@ def print_data_dirs_info():
 			hard_links_yn = "Yes" if hl_size else "No"
 			print (f'{file_count:12,}  {dir_size:16,}  {hl_size:>16,}  {rc_path}')
 		else:
-			print ('{:11}  {:>16}  {:>16}  {}'.format ('-', '-', '-'))
+			print ('{:11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
 
 		with Spinner ('  External Container #2: '):
 			dir_size,file_count,hl_size = get_folder_stats (remote_container_path2)
@@ -3659,10 +3654,12 @@ def print_head (log_name: str, count: int, header: bool, succinct: bool) -> int:
 
 
 
-def read_system_log():
+def read_system_log (line_count: int = 100):
 	"""
 	Print the macOS or Ubuntu system log, filtered for FMS messages.
 	"""
+	#TODO: implement line count limit
+
 	if platform.system() != 'Darwin':
 		print("This function is only supported on macOS.")
 		return
@@ -3748,9 +3745,9 @@ def print_standby_info():
 def print_tail (log_name: str, count: int, header: bool, succinct: bool) -> int:
 	"""
 	Print up to 'count' number of lines of text from the end of the file at path.
-	Result is False if there was an error opening or reading the file.
 	If 'header' is true, display the log headers (if any) as first line.
 	If 'succinct' is true, strip less useful info from lines.
+	Returns a negative error code if there was an error. Otherwise, returns the number of lines printed.
 	"""
 
 	line_list = []
@@ -3825,8 +3822,11 @@ def print_tail (log_name: str, count: int, header: bool, succinct: bool) -> int:
 				os.dup2(devnull, sys.stdout.fileno())
 				line_count = -line_count
 				break
-	
-	return len (line_list) + header_count
+
+	if line_count > 0:
+		return line_count + header_count
+	else:
+		return -3
 
 
 #
@@ -3859,7 +3859,7 @@ def print_tls_version (host: str, port=443) -> bool:
 		print ('SSL/TLS version: ', end='')
 		print_error (f'Error, connection to {host}:{port} timed out')
 	except ssl.SSLError as e:
-		print_error ('  ', str (e))
+		print_error ('  ' + str (e))
 	finally:
 		sock.close()
 	return return_flag
