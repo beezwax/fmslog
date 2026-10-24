@@ -28,6 +28,7 @@ Current functionality with major issues:
 - `-m` or `--merge`: not implemented
 - `-s` or `--succinct`: partially implemented
 - `--ssh`: not implemented
+- `--tail=n`: numeric parameter ignored
 - `-t` or `--tail`: may not print current log segment before starting to follow/tail
 - nginx/apache/IIS: log parsing not fully implemented
 
@@ -55,7 +56,7 @@ usage: fmslog [-b BEGIN] [-e EDIT] [-f FILTER] [-h] [-H] [-i] [-l] [-L] [-m] [-n
 View FileMaker Server logs and set logging options
 
 positional arguments (log name):
-  {access,admin,clientstats,dapi,event,fac,fmodatadebug,fmsadmindebug,fmsasedebug,fmscwpc,fmscwpcli,fmsdebug,fmsgetpasskeyebug,fmshdebug,fmshelper,fmslogdebug,fmwipd,httpaccess,httpdctlerr,httpdctlout,httperror,httpsslaccess,httpsslerror,install,httpaccess,loadschedules,odata,scriptevent,stats,stderr,stdout,topcall,trimlog,wpe,wpedebug,interval,clientstats,fmsdebug,logsize,topcall}
+  {access,admin,adminapi,catalina,clientstats,dapi,event,fac,fmodatadebug,fmsadmindebug,fmsasedebug,fmscwpc,fmscwpcli,fmsdebug,fmsgetpasskeyebug,fmshdebug,fmshelper,fmslogdebug,fmwipd,httpaccess,httpdctlerr,httpdctlout,httperror,httpsslaccess,httpsslerror,install,httpaccess,loadschedules,odata,odatadebug,scriptevent,stats,stderr,stdout,topcall,trimlog,wpe,wpedebug,xdbc}
 
 options:
   -B, --backups             list scheduled backup sets present, including total number of files and size
@@ -116,7 +117,7 @@ Normally, one screen full of output starting at earliest message is output. Use 
 
 ### -B, --backups
 
-List the paths, their sizes, and total size of hard linked files in backup sets. Target paths are determined by scanning FMS' preferences file.
+List the paths, their sizes, and total size of hard linked files for backup sets from scheduled and progressive (incremental) backups. Target paths are determined by scanning FMS' preferences file.
 
 Typical disk usage calculations may overstate actual usage, since backup sets can use shared (hard linked) copies of the same data
 if there were no changes between the backup sets and the backups were created with the same backup schedule. By subtracting the size of the hard
@@ -137,6 +138,8 @@ Create a .zip file containing all of the named logs.
 ### -D, --data
 Using values based on the last relevant message in the Event log, display the current database directories being used and their sizes, splitting out any
 optional external container directories.
+File counts, sizes, hard-link sizes, and paths use consistent columns, including
+container subdirectories and unavailable-directory placeholders.
 If a Default or Secure path cannot be recovered from the Event logs, a warning
 is displayed and reporting continues for the remaining directories.
 
@@ -212,7 +215,7 @@ Print messages as they are added to log files until user cancels with Ctrl-C.
 Use the form `--tail=<seconds>` to set how many seconds to wait between checks for new data.
 
 ### --test-odata
-Runs various operations in the test file to verify functionality. You must specify the account (-u) and the password (-p) before the `--odata` option.
+Runs various operations in the test file to verify functionality. You must specify the account (-u) and the password (-p) before the `--test-odata` option.
 
 After hosting the API_Testing file, a complete test command looks like this:
 ```sh

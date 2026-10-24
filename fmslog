@@ -7,7 +7,7 @@ Author: Simon Brown on 10/15/2025
 Purpose: Display FileMaker Server logs, change logging options, and get resource usage.
 """
 
-VERSION = "0.59 - 2026-10-23"
+VERSION = "0.60 - 2026-10-23"
 
 # Only using standard library modules.
 
@@ -40,7 +40,7 @@ import time
 import ssl
 import urllib.request, urllib.parse, urllib.error
 from contextlib import ExitStack
-from decimal import Decimal
+
 
 #
 #	g e t _ f m s _ v e r s i o n
@@ -2320,8 +2320,8 @@ def get_tomcat_version() -> str:
 	
 	if tomcat_out:
 		return re.search (r'Server number:  (.*)', tomcat_out).group(1)
-	else:
-		None
+	
+	return None
 
 	# WINDOWS:
 	# & "C:\Program Files\FileMaker\FileMaker Server\Web Publishing\java\bin\java" -cp "C:\Program Files\FileMaker\FileMaker Server\Web Publishing\publishing-engine\jwpc-tomcat\lib\catalina.jar" org.apache.catalina.util.ServerInfo
@@ -2533,7 +2533,7 @@ def get_vaadin_version() -> str:
 			if match:
 				vaadin_str = match.group(1)
 		except FileNotFoundError:
-			pass
+			pass # use default result, don't throw exception
 
 	return vaadin_str
 
@@ -2612,7 +2612,7 @@ def init_parser() -> argparse.ArgumentParser:
 	parser.add_argument('-b', '--begin', nargs=1, help='start at first message on or after time or time interval')
 	parser.add_argument('--capture', nargs=1, metavar='ZIPFILE', help='save the named log files to a zip archive at the given path')
 	parser.add_argument('-C', '--check-connectivity', dest='check_connectivity', action='store_true', help='check connectivity of API endpoints')
-	parser.add_argument('-D', '--databases', action='store_true', help='display database, container, document, and temp directory info')
+	parser.add_argument('-D', '--data', action='store_true', help='display database, container, document, and temp directory info')
 	parser.add_argument('--dir', nargs=1, help='print the directory path of the named log')
 	parser.add_argument('-e', '--edit', nargs=1, help='open the log file using the command defined by $EDITOR')
 	parser.add_argument('-f', '--filter', nargs=1, help='only return lines matching regex expression')
@@ -2633,8 +2633,8 @@ def init_parser() -> argparse.ArgumentParser:
 	parser.add_argument('--restart-fms', action='store_true', help='restart the FileMaker Server service')
 	parser.add_argument('--start-fms', action='store_true', help='start the FileMaker Server service')
 	parser.add_argument('--stop-fms', action='store_true', help='stop the FileMaker Server service')
-	parser.add_argument('-t', dest='tail', action='store_true', help='wait for any new messages')
-	parser.add_argument('--tail', dest='tail', type=float, nargs=1, default=[-1.0], help='wait for any new messages, specifying number of seconds to wait for each file')
+	parser.add_argument('-t', '--tail', dest='tail', action='store_true', help='wait for any new messages')
+	#parser.add_argument('--tail', type=float, nargs='?', const=1.0, default=[-1.0], help='wait for any new messages, optionally specifying number of seconds to wait for each file')
 	parser.add_argument('--test-dapi', action='store_true', help='extended Data API (DAPI) checks; requires API_Testing file')
 	parser.add_argument('--test-odata', action='store_true', help='extended OData API checks; requires API_Testing file')
 	parser.add_argument('--truncate', action='store_true', help='cut off any output if beyond width of screen')
@@ -2731,7 +2731,7 @@ def mac_log_tail (minutes_back: str):
 	Return recent lines from the macOS system log for the given duration.
 	"""
 	return subprocess.run(
-		['log', 'show', '--style', 'json', '--last', minutes_back + 'm', '--info', '--predicate' 'process=="fmserverd"'],
+		['log', 'show', '--style', 'json', '--last', minutes_back + 'm', '--info', '--predicate', 'process=="fmserverd"'],
 		capture_output=True,
 		text=True).stdout.split('\n')
 
@@ -3127,6 +3127,17 @@ def print_data_dirs_info():
 	rc_dir = 'RC_Data_FMS'
 	rm_dir = 'Removed_by_FMS'
 	exclude_dirs = [rc_dir, rm_dir]
+
+	def print_directory(label, path, exclude_dirs=None):
+		with Spinner (f'{label:26}'):
+			if exclude_dirs is not None:
+				dir_size,file_count,hl_size = get_folder_stats (path, exclude_dirs=exclude_dirs)
+			else:
+				dir_size,file_count,hl_size = get_folder_stats (path)
+		if exclude_dirs is not None or (path and dir_size >= 0):
+			print (f'\r{label:26}{file_count:11,}  {dir_size:16,}  {hl_size:16,}  {path}')
+		else:
+			print ('\r{:26}{:>11}  {:>16}  {:>16}  {}'.format (label, '-', '-', '-', '-'))
 	
 	(default_path, secure_path, additional_path1, additional_path2, remote_container_path1, remote_container_path2) = get_db_directories()
 	
@@ -3136,77 +3147,23 @@ def print_data_dirs_info():
 
 	for label, path in (('Default', default_path), ('Secure', secure_path)):
 		if not path:
-			print_warning (f'{label}: path unavailable in Event.log or Event-old.log')
+			print_warning (f'{label}: path not found in Event.log or Event-old.log')
 			continue
 
-		dir_size,file_count,hl_size = get_folder_stats (path, exclude_dirs=exclude_dirs)
-		print (f'{label + ":":26}{file_count:11,}  {dir_size:16,}  {hl_size:16,}  {path}')
+		print_directory (label + ':', path, exclude_dirs)
 
 		for subdir in (rc_dir, rm_dir):
-			with Spinner ('  ' + subdir + ':' + ' ' * (24 - len(subdir))):
-				subpath = os.path.join (path, subdir)
-				dir_size,file_count,hl_size = get_folder_stats (subpath)
-			if dir_size >= 0:
-				print (f'{file_count:11,}  {dir_size:16,}  {hl_size:>16,}  {subpath}')
-			else:
-				print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
+			print_directory ('  ' + subdir + ':', os.path.join (path, subdir))
 
-	# ADDITIONAL 1
-	if additional_path1:
-		dir_size,file_count,hl_size = get_folder_stats (additional_path1, exclude_dirs=exclude_dirs)
-		print (f'Additional Databases #1:  {file_count:11,}  {dir_size:16,}  {hl_size:16,}  {additional_path1}')
-
-		with Spinner ('  ' + rc_dir + ':           '):
-			rc_path = os.path.join (additional_path1,rc_dir)
-			dir_size,file_count,hl_size = get_folder_stats (rc_path)
-		if dir_size >= 0:
-			print (f'{file_count:11,}  {dir_size:16,}  {hl_size:>16,}  {rc_path}')
-		else:
-			print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
-
-		with Spinner ('  External Container #1: '):
-			dir_size,file_count,hl_size = get_folder_stats (remote_container_path1)
-		if remote_container_path1 and dir_size >= 0:
-			print (f'{file_count:11,}  {dir_size:16,}  {hl_size:>16,}  {remote_container_path1}')
-		else:
-			print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
-
-		with Spinner ('  ' + rm_dir + ':        '):
-			rm_path = os.path.join (additional_path1, rm_dir)
-			dir_size,file_count,hl_size = get_folder_stats (rm_path)
-		if dir_size >= 0:
-			print (f'{file_count:11,}  {dir_size:16,}  {hl_size:>16,}  {rm_path}')
-		else:
-			print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
-
-	# ADDITIONAL 2
-	if additional_path2:
-		dir_size,file_count,hl_size = get_folder_stats (additional_path2, exclude_dirs=exclude_dirs)
-		print (f'Additional Databases #2:  {file_count:11,}  {dir_size:16,}  {hl_size:16,}  {additional_path2}')
-
-		with Spinner ('  ' + rc_dir + ':           '):
-			rc_path = os.path.join (additional_path2, rc_dir)
-			dir_size,file_count,hl_size = get_folder_stats (rc_path)
-		if dir_size >= 0:
-			hard_links_yn = "Yes" if hl_size else "No"
-			print (f'{file_count:12,}  {dir_size:16,}  {hl_size:>16,}  {rc_path}')
-		else:
-			print ('{:11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
-
-		with Spinner ('  External Container #2: '):
-			dir_size,file_count,hl_size = get_folder_stats (remote_container_path2)
-		if remote_container_path2 and dir_size >= 0:
-			print (f'{file_count:11,}  {dir_size:16,}  {hl_size:16,}  {remote_container_path2}')
-		else:
-			print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
-
-		with Spinner ('  ' + rm_dir + ':        '):
-			rm_path = os.path.join (additional_path2, rm_dir)
-			dir_size,file_count,hl_size = get_folder_stats (rm_path)
-		if dir_size >= 0:
-			print (f'{file_count:11,}  {dir_size:16,}  {hl_size:>16,}  {rm_path}')
-		else:
-			print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
+	for number, path, container_path in (
+		(1, additional_path1, remote_container_path1),
+		(2, additional_path2, remote_container_path2),
+	):
+		if path:
+			print_directory (f'Additional Databases #{number}:', path, exclude_dirs)
+			print_directory ('  ' + rc_dir + ':', os.path.join (path, rc_dir))
+			print_directory (f'  External Container #{number}:', container_path)
+			print_directory ('  ' + rm_dir + ':', os.path.join (path, rm_dir))
 
 	print ()
 	print ('=== OTHER DATA DIRECTORIES & FILES ===')
@@ -3231,7 +3188,7 @@ def print_documents_info():
 	with Spinner ('Documents                '):
 		documents_size,file_count,hl_size = get_folder_stats (documents_path)
 	# Any point in displaying if has hard links?
-	print (f'{file_count:11,}  {documents_size:16,}                    {documents_path}')
+	print (f'\r{"Documents":26}{file_count:11,}  {documents_size:16,}                    {documents_path}')
 
 #
 #	p r i n t _ d o c u m e n t s _ w e b _ i n f o
@@ -3246,7 +3203,7 @@ def print_documents_web_info():
 	with Spinner ('Web Documents            '):
 		documents_size,file_count,hl_size = get_folder_stats (documents_path)
 	# Any point in displaying if has hard links?
-	print (f'{file_count:11,}  {documents_size:16,}                    {documents_path}')
+	print (f'\r{"Web Documents":26}{file_count:11,}  {documents_size:16,}                    {documents_path}')
 
 #
 #	e r r o r _ s t r i n g
@@ -3495,9 +3452,9 @@ def print_log_info():
 			try:
 				mod_time = os.path.getmtime(full_path)
 			except FileNotFoundError:
-				pass
+				pass # squelch exception
 
-		if mod_time > 0:
+		if mod_time > 0: # getmtime worked?
 			mod_timestamp = time.ctime(mod_time)
 			age_seconds = max(0, time.time() - mod_time)
 
@@ -3835,6 +3792,7 @@ def print_tail (log_name: str, count: int, header: bool, succinct: bool) -> int:
 				devnull = os.open(os.devnull, os.O_WRONLY)
 				os.dup2(devnull, sys.stdout.fileno())
 				line_count = -line_count
+				# devnull will be closed when Python exits.
 				break
 
 	else:		
@@ -3845,6 +3803,7 @@ def print_tail (log_name: str, count: int, header: bool, succinct: bool) -> int:
 				devnull = os.open(os.devnull, os.O_WRONLY)
 				os.dup2(devnull, sys.stdout.fileno())
 				line_count = -line_count
+				# devnull will be closed when Python exits.
 				break
 
 	if line_count > 0:
@@ -4331,6 +4290,7 @@ class TailPrint:
 			with ExitStack() as stack:
 				#with open(self.tailed_file) as file_:
 				file_list = [stack.enter_context(open (fpath, 'r', encoding='utf-8')) for fpath in self.log_paths]
+				# Files will be closed when Python exits.
 				for file in file_list:
 					file.seek(0,2)
 				
@@ -4416,7 +4376,7 @@ def handle_named_options (args) -> bool:
 		check_connectivity()
 		ignore_positionals = True
 
-	if args.databases:
+	if args.data:
 		print_data_dirs_info()
 		ignore_positionals = True
 
@@ -4572,7 +4532,7 @@ def main():
 		
 			break
 		
-		# HEAD OR TAIL
+		# DO FOR BOTH HEAD & TAIL
 		
 		lines_printed = 0;
 		last_log = args.logs[-1]
