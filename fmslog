@@ -3232,6 +3232,7 @@ def print_data_dirs_info():
 	print_documents_info()
 	print_documents_web_info()
 	print_fmtmp_info()
+	print_remotebackup_info()
 	print_standby_info()
 	print ()
 
@@ -3740,6 +3741,23 @@ def print_net_status():
 	print ('External Interface:', get_local_ip())
 	print ('FMS Network Address(es):', get_network_address())
 	print ()
+
+#
+#	p r i n t _ s t a n d b y _ i n f o
+#
+
+def print_remotebackup_info():
+	"""
+	Display disk usage for the RemoteBackup service.
+	"""
+
+	rb_path = os.path.join (BASE_PATH, 'Data','RemoteBackup') 
+
+	rb_size,file_count,hl_size = get_folder_stats (rb_path)
+	# Any point in displaying if has hard links?
+	if rb_size > -1: # skip if RemoteBackup dir missing (new to FMS 26)
+		path_label = 'RemoteBackup Data'
+		print (f'{path_label:24}  {file_count:11,}  {rb_size:16,}                    {rb_path}')
 
 #
 #	p r i n t _ s t a n d b y _ i n f o
