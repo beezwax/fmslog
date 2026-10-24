@@ -7,7 +7,7 @@ Author: Simon Brown on 10/15/2025
 Purpose: Display FileMaker Server logs, change logging options, and get resource usage.
 """
 
-VERSION = "0.58 - 2026-10-22"
+VERSION = "0.59 - 2026-10-23"
 
 # Only using standard library modules.
 
@@ -665,7 +665,7 @@ def calc_row_metrics (num_logs, log_lines_count_val) -> tuple:
 			screens_num = int (screens_num_str)
 		except ValueError:
 			print ("Error: invalid number for number parameter")
-			return (-1,-1)
+			return (-1,-1,-1)
 			
 		screen_lines_count = max ([SCREENROWS * screens_num - 1, 6])
 
@@ -2140,6 +2140,7 @@ def get_apache_version() -> str:
 	Run the httpd command and extract the version info.
 	"""
 	if platform.system() == 'Darwin':
+		#TODO: does not handle case where homebrew or macports used to install httpd
 		apache_path = '/usr/sbin/httpd'
 	elif platform.system() == 'Linux':
 		apache_path = '/usr/sbin/apache2'
@@ -2148,7 +2149,7 @@ def get_apache_version() -> str:
 
 	try:
 		httpd_out_lines = subprocess.run(
-			['/usr/sbin/httpd', '-v'],
+			[apache_path, '-v'],
 			capture_output=True,
 			text=True).stdout.split('\n')
 		return re.search (r'Apache/(.*) ', httpd_out_lines[0]).group(1)
@@ -2288,6 +2289,7 @@ def get_tomcat_version() -> str:
 	
 	try:
 		if platform.system() == 'Darwin':
+			#TODO: does not handle case where Java not installed with FAC
 			java_path = BASE_PATH + '/Web Publishing/java/bin/java'
 			if os.path.isfile (java_path):
 				tomcat_out = subprocess.run(
@@ -2299,7 +2301,7 @@ def get_tomcat_version() -> str:
 				return java_missing_str
 
 		if platform.system() == 'Linux':
-			java_path = BASE_PATH + '/usr/bin/java'
+			java_path = '/usr/bin/java'
 			if os.path.isfile (java_path):
 				tomcat_out = subprocess.run(
 					[java_path, '-cp', '/opt/FileMaker/FileMaker Server/Web Publishing/publishing-engine/jwpc-tomcat/lib/catalina.jar', 'org.apache.catalina.util.ServerInfo'],
@@ -2853,39 +2855,60 @@ def manage_fms_service (action: str) -> bool:
 def parse_begin_time (time_str: str) -> datetime.datetime:
 	"""
 	Convert the various possible time values into a timestamp value. Some
-	possible values could be '30s' for 30 seconds from now, or '14:00:10'
+	possible values could be '30s' for 30 seconds ago, or '14:00:10'
 	for 10 secs past 2pm today, or '2025-11-04 14:00' for 2pm on Nov 4.
+	Absolute timestamps also accept a 'T' separator; a date alone means midnight.
 	"""
 	
 	new_time = None
-	
-	# Duration value or a timestamp?
-	m = re.search('[0-9]{0,6}[smhd]', time_str)
-	if m.group(0):
-		if len (time_str) == len (m.group(0)):
-			new_time = datetime.datetime.now()
-			unit = m.group(0)[-1]
-			unit_count = 1
-			
-			if len (m.group(0)) > 1:
-				unit_count = max (int (m.group(0)[:-1]), 1)
-			if unit == 's':
-				new_time -= datetime.timedelta(seconds=unit_count)
-			elif unit == 'm':
-				new_time -= datetime.timedelta(minutes=unit_count)
-			elif unit == 'h':
-				new_time -= datetime.timedelta(hours=unit_count)
-			elif unit == 'd':
-				# Start days at midnight
-				new_time = new_time.replace (hour=0, minute=0, second=0, microsecond=0)
-				new_time -= datetime.timedelta(days=unit_count-1)
+	now = datetime.datetime.now()
+	unit_count = None
 
-			else:
-				print ('Error: invalid duration')
-				sys.exit(9)
-	
-	print (new_time, unit_count)
-	return new_time
+	# RELATIVE TIME VALUE?
+	# Duration values: 30s, 15m, 2h, 7d (or bare unit like "s" meaning 1s).
+	m = re.fullmatch(r'([0-9]{1,6})?([smhd])', time_str)
+	if m:
+		unit = m.group(2)
+		unit_count = max(int(m.group(1) or '1'), 1)
+		new_time = now
+
+		if unit == 's':
+			new_time -= datetime.timedelta(seconds=unit_count)
+		elif unit == 'm':
+			new_time -= datetime.timedelta(minutes=unit_count)
+		elif unit == 'h':
+			new_time -= datetime.timedelta(hours=unit_count)
+		elif unit == 'd':
+			# Start days at midnight
+			new_time = new_time.replace(hour=0, minute=0, second=0, microsecond=0)
+			new_time -= datetime.timedelta(days=unit_count-1)
+
+		return new_time
+
+	# VALUE IS A TIMESTAMP?
+	# Time today: HH:MM[:SS]
+	for fmt in ('%H:%M:%S', '%H:%M'):
+		try:
+			t = datetime.datetime.strptime(time_str, fmt).time()
+			return now.replace(hour=t.hour, minute=t.minute, second=t.second, microsecond=0)
+		except ValueError:
+			pass
+	# Absolute timestamp; a date alone means midnight.
+	for fmt in (
+		'%Y-%m-%d %H:%M:%S',
+		'%Y-%m-%d %H:%M',
+		'%Y-%m-%dT%H:%M:%S',
+		'%Y-%m-%dT%H:%M',
+		'%Y-%m-%d'
+	):
+		try:
+			return datetime.datetime.strptime(time_str, fmt)
+		except ValueError:
+			pass
+	print ('Error: invalid begin time value; expected [N]s, [N]m, [N]h, [N]d, '
+		'HH:MM[:SS], YYYY-MM-DD, or YYYY-MM-DD HH:MM[:SS] (space or T separator)')
+	sys.exit(9)
+
 
 #
 #	p i c k _ f r o m _ l i s t
@@ -4572,4 +4595,3 @@ def main():
 
 if __name__=="__main__":
 	main()
-

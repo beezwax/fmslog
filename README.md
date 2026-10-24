@@ -23,7 +23,6 @@ Design Goals:
 ## CURRENT ISSUES
 
 Current functionality with major issues:
-- `-b` or `--begin`: only working with durations (eg, 'd' or '1d' for 1 day)
 - `-B` or `--backups`: may list backup sets twice if target dir is used more than once but using different path
 - `-C` or `--check-connectivity`: VPN connection may confuse tests
 - `-m` or `--merge`: not implemented
@@ -93,11 +92,24 @@ options:
 ---
 
 ### -b, --begin
-Start printing logs on or after the given duration. Durations are an optional number followed by:
-- 's': seconds from now
-- 'm': minutes from now
-- 'h': hours from now
+Start printing logs on or after the given time or duration. Durations are an optional number followed by:
+- 's': seconds ago
+- 'm': minutes ago
+- 'h': hours ago
 - 'd': days since midnight today (e.g., '2d' would be from midnight yesterday)
+
+Time-only values use `HH:MM` or `HH:MM:SS` on today's date.
+Absolute timestamps use `YYYY-MM-DD HH:MM[:SS]` or `YYYY-MM-DDTHH:MM[:SS]`.
+A date alone (`YYYY-MM-DD`) means midnight on that date. All timestamps use
+local time without a timezone offset.
+
+Timestamps containing a space need to be quoted or escaped:
+
+```sh
+fmslog --begin '2025-11-04 14:00' event
+fmslog --begin 2025-11-04T14:00:10 event
+fmslog --begin 2025-11-04 event
+```
 
 Normally, one screen full of output starting at earliest message is output. Use the -n option to change this.
 
@@ -129,7 +141,9 @@ The total size values for Default and Secure folders does not include the enclos
 
 ### --dir LOGNAME
 Print the directory path for the given log name. Could be used in shell command like this:
-`cd "$(fmslog --dir event)"`
+```sh
+cd "$(fmslog --dir event)"
+```
 This will change the current directory to the location of the `Event.log` file. The double quotes are needed for macOS because there is a space character in the path.
 
 ### -e, --edit LOGNAME
@@ -194,7 +208,9 @@ Use the form `--tail=<seconds>` to set how many seconds to wait between checks f
 Runs various operations in the test file to verify functionality. You must specify the account (-u) and the password (-p) before the `--odata` option.
 
 After hosting the API_Testing file, a complete test command looks like this:
-`fmslog --test-odata -u api-test -p fmslog-access`
+```sh
+fmslog --test-odata -u api-test -p fmslog-access
+```
 
 The optional `time` command in the above example provides additional stats on CPU usage and how long the test took to complete.
 
@@ -205,7 +221,8 @@ Remove any output from the end of the line that would cause a line wrap for the 
 Used to specify the account/user name for FMS admin console or API testing file access.
 
 ### -V, --version
-Print version of fmslog command and FileMaker Server components.
+Print version of fmslog command and FileMaker Server components. May not handle all use cases,
+such as Java installed without using the FMS admin console.
 
 ---
 
