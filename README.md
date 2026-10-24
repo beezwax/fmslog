@@ -102,6 +102,7 @@ Time-only values use `HH:MM` or `HH:MM:SS` on today's date.
 Absolute timestamps use `YYYY-MM-DD HH:MM[:SS]` or `YYYY-MM-DDTHH:MM[:SS]`.
 A date alone (`YYYY-MM-DD`) means midnight on that date. All timestamps use
 local time without a timezone offset.
+OData log timestamps with offsets are converted to local time before comparison.
 
 Timestamps containing a space need to be quoted or escaped:
 
@@ -136,6 +137,8 @@ Create a .zip file containing all of the named logs.
 ### -D, --data
 Using values based on the last relevant message in the Event log, display the current database directories being used and their sizes, splitting out any
 optional external container directories.
+If a Default or Secure path cannot be recovered from the Event logs, a warning
+is displayed and reporting continues for the remaining directories.
 
 The total size values for Default and Secure folders does not include the enclosed RC_Data_FMS folders, which are totaled separately.
 
@@ -190,6 +193,10 @@ Display metrics for all processes running under the fmserver user. Metrics inclu
 
 ### -s, --succinct
 Shorten the output of log lines where possible. This includes things like redundant time zones and host names, and shortening some values (eg, Warning becomes Warn).
+
+For ClientStats and TopCallStats, succinct output removes the timezone while
+preserving the remaining fields. For Data API logs, it also removes the host
+address, preserving the code, level, user, HTTP method, message, and size.
 
 ### -S, --set VERB NOUN
 Change FMS configuration options. It takes two parameters, a noun and a verb. Currently, verbs are `enable` or `disable`.

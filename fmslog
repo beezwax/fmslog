@@ -26,7 +26,6 @@ import os
 import pathlib
 import platform
 import pprint
-import pwd
 import random
 import re
 import shutil
@@ -876,7 +875,7 @@ def test_dapi_functions():
 		dapi = FileMakerDAPI (username=USER, password=PASSWORD)
 		if not dapi.authenticate():
 			 sys.exit(3)
-
+		
 		try:
 			start_time = datetime.datetime.now()
 			# This also tests the ability to run a script.
@@ -2032,9 +2031,14 @@ def find_first_timestamp (file_path: str, timestamp: datetime.datetime) -> int:
 				# Access, ClientStats, Event, Stats, etc.
 				# 2025-10-27 04:13:24.101 -0700	Information	228	tool.beezwax.net	The previous log file reached maximum size, and was renamed to "Access-old.log".
 				line_ts = datetime.datetime.fromisoformat(line [:23])
+			elif line[4] == '-' and line[10] == 'T':
+				# OData uses ISO timestamps with fractional seconds and an offset.
+				line_ts = datetime.datetime.fromisoformat(line.split()[0])
+				if line_ts.tzinfo is not None:
+					line_ts = line_ts.astimezone().replace(tzinfo=None)
 			elif line [4] == '/' and line [24] == ':':
 				# 2025/10/25 17:49:09.0162
-				line_ts = datetime.strptime(line [:23], "%Y/%m/%d %H:%M:%S.%f")
+				line_ts = datetime.datetime.strptime(line [:24], "%Y/%m/%d %H:%M:%S.%f")
 			elif line [6] == ',' and line [22] in 'APM':
 				# Sep 11, 2025 12:40:52 PM org.atmosphere.cpr.AtmosphereFramework addInterceptorToAllWrappers
 				# Oct 22, 2025 2:16:56 PM org.atmosphere.util.IOUtils guestRawServletPath
@@ -3065,6 +3069,8 @@ def print_crash_reports() -> str:
 		print(f"Crash log listing not supported on {curr_platform}")
 		return
 	
+	import pwd
+
 	# Get fmserver user UID
 	try:
 		fmserver_uid = pwd.getpwnam('fmserver').pw_uid
@@ -3128,45 +3134,22 @@ def print_data_dirs_info():
 	print ('=== DATABASE DIRECTORIES ===')
 	print ('                          {:>11}  {:>16}  {:>16}  {}'.format ('FILES', 'SIZE', 'H/L SIZE', 'PATH'))
 
-	# DEFAULT
-	dir_size,file_count,hl_size = get_folder_stats (default_path, exclude_dirs=exclude_dirs)
-	print (f'Default:                  {file_count:11,}  {dir_size:16,}  {hl_size:16,}  {default_path}')
+	for label, path in (('Default', default_path), ('Secure', secure_path)):
+		if not path:
+			print_warning (f'{label}: path unavailable in Event.log or Event-old.log')
+			continue
 
-	with Spinner ('  ' + rc_dir + ':           '):
-		rc_path = os.path.join (default_path, rc_dir)
-		dir_size,file_count,hl_size = get_folder_stats (rc_path)
-	if dir_size >= 0:
-		print (f'{file_count:11,}  {dir_size:16,}  {hl_size:>16}  {rc_path}')
-	else:
-		print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
+		dir_size,file_count,hl_size = get_folder_stats (path, exclude_dirs=exclude_dirs)
+		print (f'{label + ":":26}{file_count:11,}  {dir_size:16,}  {hl_size:16,}  {path}')
 
-	with Spinner ('  ' + rm_dir + ':        '):
-		rm_path = os.path.join (default_path, rm_dir)
-		dir_size,file_count,hl_size = get_folder_stats (rm_path)
-	if dir_size >= 0:
-		print (f'{file_count:11,}  {dir_size:16,}  {hl_size:>16,}  {rm_path}')
-	else:
-		print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
-
-	# SECURE
-	dir_size,file_count,hl_size = get_folder_stats (secure_path, exclude_dirs=exclude_dirs)
-	print (f'Secure:                   {file_count:11,}  {dir_size:16,}  {hl_size:16,}  {secure_path}')
-
-	with Spinner ('  ' + rc_dir + ':           '):
-		rc_path = os.path.join (secure_path, rc_dir)
-		dir_size,file_count,hl_size = get_folder_stats (rc_path)
-	if dir_size >= 0:
-		print (f'{file_count:11,}  {dir_size:16,}  {hl_size:>16,}  {rc_path}')
-	else:
-		print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
-
-	with Spinner ('  ' + rm_dir + ':        '):
-		rm_path = os.path.join (secure_path, rm_dir)
-		dir_size,file_count,hl_size = get_folder_stats (rm_path)
-	if dir_size >= 0:
-		print (f'{file_count:11,}  {dir_size:16,}  {hl_size:>16,}  {rm_path}')
-	else:
-		print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
+		for subdir in (rc_dir, rm_dir):
+			with Spinner ('  ' + subdir + ':' + ' ' * (24 - len(subdir))):
+				subpath = os.path.join (path, subdir)
+				dir_size,file_count,hl_size = get_folder_stats (subpath)
+			if dir_size >= 0:
+				print (f'{file_count:11,}  {dir_size:16,}  {hl_size:>16,}  {subpath}')
+			else:
+				print ('{:>11}  {:>16}  {:>16}  {}'.format ('-', '-', '-', '-'))
 
 	# ADDITIONAL 1
 	if additional_path1:
@@ -4268,7 +4251,7 @@ class Spinner:
 def strip_line (log_name: str, line: str) -> str:
 	"""
 	When possible, remove repetitive or extraneous text in the logs.
-	This is done after expanding tabs so columns should be at fixed positions.
+	This is done before expanding tabs.
 	"""
 
 	if log_name in ['access','event']:
@@ -4279,10 +4262,13 @@ def strip_line (log_name: str, line: str) -> str:
 	if log_name == 'admin':
 		if line [20] == '-':
 			line = line [:20] + line [26:]							# remove timezone
-	if log_name in ['clientstats','dapi','topcall']:
-		line = line [:23] + line [29]								# remove timezone
+	if log_name in ['clientstats','topcall']:
+		line = line [:23] + line [29:]								# remove timezone
 	if log_name == 'dapi':
-		line = line [:23] + line [29:45] + line[62:]			# remove timezone & hostname
+		items = line.split('\t')
+		items[0] = items[0][:23]
+		del items[3]														# remove hostname
+		line = '\t'.join(items)
 
 	return line
 
