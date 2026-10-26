@@ -7,7 +7,7 @@ Author: Simon Brown on 10/15/2025
 Purpose: Display FileMaker Server logs, change logging options, and get resource usage.
 """
 
-VERSION = "0.60 - 2026-10-23"
+VERSION = "0.61 - 2026-10-26"
 
 # Only using standard library modules.
 
@@ -699,8 +699,9 @@ def check_endpoint_status (name: str, host: str, endpoint: str, expected_status:
 	try:
 		conn.request(method, endpoint)
 		response = conn.getresponse()
+
 		if response.status in (200,202) or response.status == expected_status:
-			# In some cases we get a 200 or similar, but there is an error in the XML.
+			# In some cases we get a 200 or similar, but there is an error as part of the XML response.
 			body = response.read(500).decode('utf-8')
 			if body.startswith ('<?xml '):
 				match = re.search(r'<error code="(\d+)', body)
@@ -715,21 +716,40 @@ def check_endpoint_status (name: str, host: str, endpoint: str, expected_status:
 				else:
 					print_error ('Error, result missing')
 
+			elif response.status == 404 and endpoint.startswith ('/fmi/admin/api/'):
+				try:
+					data = json.loads(body)
+				except json.JSONDecodeError:
+					data = {}
+				# "Authorization: required header wasn't specified for this request" is message for code 1705
+				print()
+				print (data)
+				print()
+				if "messages" in data and isinstance(data["messages"], list) and len(data["messages"]) > 0:
+					if data["messages"][0].get("code") == '1705':
+						print ('Responding')
+						result_flag = True
+					else:
+						print_error ('Service Unavailable')
+
 			elif endpoint.startswith ('/fmi/data'):
 				if body.startswith ('{"response":{"productInfo"'):
 					print ('Responding')
 					result_flag = True
 				else:
 					print_error ('Error, unexpected response')
+			
 			elif endpoint.startswith ('/fmi/odata'):
 				if body.startswith ('{"error": {"code": "18",') or body.startswith ('{"@context": "https'):
 					print ('Responding')
 					result_flag = True
 				else:
 					print_error ('Error, unexpected response')
+			
 			else:
 				print ('Responding')
 				result_flag = True
+			
 		else:
 			if response.reason:
 				if not as_error and response.reason == 'Service Unavailable':
@@ -755,16 +775,20 @@ def check_endpoint_status (name: str, host: str, endpoint: str, expected_status:
 #	c h e c k _ c o n n e c t i v i t y
 #
 
-def check_connectivity():
+def check_connectivity(extern_addr=None):
 	"""
-	Check both internal and external interfaces for a response from the DAPI endpoint.
+	Check connectivity for a response from the DAPI endpoint.
+	If extern_addr is provided, only check the external interface.
 	"""
 	
+	check_internal = extern_addr is None
 	intern_addr = '127.0.0.1'
-	extern_addr = get_local_ip()
+	if check_internal:
+		extern_addr = get_local_ip()
 
 	print ()
-	print ('Internal Interface:', intern_addr)
+	if check_internal:
+		print ('Internal Interface:', intern_addr)
 	print ('External Interface:', extern_addr)
 	print ()
 	print ('=== Web SSL Usage ===')
@@ -779,68 +803,83 @@ def check_connectivity():
 	print ('=== Connectivity Tests ===')
 	
 	# FMP/FMGO CLIENT
-	check_tcp_status ('Port 5003, FMP Client - Internal: ', intern_addr, 5003)
+	if check_internal:
+		check_tcp_status ('Port 5003, FMP Client - Internal: ', intern_addr, 5003)
 	check_tcp_status ('Port 5003, FMP Client - External: ', extern_addr, 5003)
 	
 	# ADMIN API
 	adminEndpoint = '/fmi/admin/api/v2/server/metadata'
-	check_endpoint_status ('Port 16001, Admin API - Internal: ', intern_addr, adminEndpoint, 400, method='POST', port=16001)
-	check_endpoint_status ('Port 443, Admin API - External: ', extern_addr, adminEndpoint, 400, method='POST', port=443, useSSL=True)
+	if check_internal:
+		check_endpoint_status ('Port 16001, Admin API - Internal: ', intern_addr, adminEndpoint, 400, method='GET', port=16001)
+	check_endpoint_status ('Port 443, Admin API - External: ', extern_addr, adminEndpoint, 400, method='GET', port=443, useSSL=True)
 	
 	# ADMIN CONSOLE
 	fac_endpoint = '/admin-console/signin'
-	check_endpoint_status ('Port 16001, Admin Console - Internal: ', intern_addr, fac_endpoint, 200, port=16001)
+	if check_internal:
+		check_endpoint_status ('Port 16001, Admin Console - Internal: ', intern_addr, fac_endpoint, 200, port=16001)
 	check_endpoint_status ('Port 443, Admin Console - External: ', extern_addr, fac_endpoint, 200, useSSL=True)
 	
 	# ADMIN CONSOLE - WORKER
 	fac_endpoint = '/admin-console/signin'
-	check_endpoint_status ('Port 16003, Web Worker - Internal: ', intern_addr, fac_endpoint, 200, port=16003, as_error=False)
+	if check_internal:
+		check_endpoint_status ('Port 16003, Web Worker - Internal: ', intern_addr, fac_endpoint, 200, port=16003, as_error=False)
 	check_endpoint_status ('Port 16003, Web Worker - External: ', extern_addr, fac_endpoint, 200, port=16003, useSSL=True, as_error=False)
 	
 	# CATALINA/CWP
-	check_tcp_status ('Port 9889, WPE - Internal: ', intern_addr, 9889, as_error=False)
+	if check_internal:
+		check_tcp_status ('Port 9889, WPE - Internal: ', intern_addr, 9889, as_error=False)
 	xmlEndpoint = '/fmi/xml'
-	check_endpoint_status ('Port 16021, CWP - XML - Internal: ', intern_addr, xmlEndpoint, 954, port=16021, as_error=False)
+	if check_internal:
+		check_endpoint_status ('Port 16021, CWP - XML - Internal: ', intern_addr, xmlEndpoint, 954, port=16021, as_error=False)
 	check_endpoint_status ('Port 443, CWP - XML - External: ', extern_addr, xmlEndpoint, 954, useSSL=True, as_error=False)
-	check_endpoint_status ('Port 16002, CWP - wpem - Internal: ', intern_addr, 'fmswpem/', 400, port=16002)
+	if check_internal:
+		check_endpoint_status ('Port 16002, CWP - wpem - Internal: ', intern_addr, 'fmswpem/', 400, port=16002)
 	check_endpoint_status ('Port 443, CWP - wpem - External: ', extern_addr, '/fmi/mwpem/', 400, useSSL=True)
 
 	# DATA API
 	# TODO: check result more closely for result below:
 	# {"response":{"productInfo":{"name":"FileMaker Data API Engine","dateFormat":"MM/dd/yyyy","timeFormat":"HH:mm:ss","timeStampFormat":"MM/dd/yyyy HH:mm:ss"}},"messages":[{"code":"0","message":"OK"}]}
-	check_tcp_status ('Port 8989, Data API (fmwipd) - Internal: ', intern_addr, 8989, as_error=False)
+	if check_internal:
+		check_tcp_status ('Port 8989, Data API (fmwipd) - Internal: ', intern_addr, 8989, as_error=False)
 	dapiEndpoint = '/fmi/data/vLatest/productInfo'
-	check_endpoint_status ('Port 3000, Data API (node) - Internal: ', intern_addr, dapiEndpoint, 200, port=3000, as_error=False)
+	if check_internal:
+		check_endpoint_status ('Port 3000, Data API (node) - Internal: ', intern_addr, dapiEndpoint, 200, port=3000, as_error=False)
 	check_endpoint_status ('Port 443, Data API - External: ', extern_addr, dapiEndpoint, 200, useSSL=True, as_error=False)
 	
 	# IWP/WebDirect Notification Service
 	# What's the endpoint used for this?
-	check_tcp_status ('Port 8998, IWP Notification Service - Internal: ', intern_addr, port=8998, as_error=False)
+	if check_internal:
+		check_tcp_status ('Port 8998, IWP Notification Service - Internal: ', intern_addr, port=8998, as_error=False)
 	check_tcp_status ('Port 8998, IWP Notification Service - External: ', extern_addr, 8998, as_error=False)
 
 	# JDBC
-	check_tcp_status ('Port 2399, JDBC - Internal: ', intern_addr, 2399, as_error=False)
+	if check_internal:
+		check_tcp_status ('Port 2399, JDBC - Internal: ', intern_addr, 2399, as_error=False)
 	check_tcp_status ('Port 2399, JDBC - External: ', extern_addr, 2399, as_error=False)
 	
 	# ODATA API
 	# TODO: check result more closely for result below:
 	# {"@context": "https://localhost/fmi/odata/v4/$metadata","value": []}
 	odataEndpoint = '/fmi/odata/v4'
-	check_endpoint_status ('Port 3001, OData API (fmodata) - Internal: ', intern_addr, odataEndpoint, 401, port=3001, as_error=False)
+	if check_internal:
+		check_endpoint_status ('Port 3001, OData API (fmodata) - Internal: ', intern_addr, odataEndpoint, 401, port=3001, as_error=False)
 	check_endpoint_status ('Port 443, OData API - External: ', extern_addr, odataEndpoint, 401, useSSL=True, as_error=False)
 
 	# docws/fmws handler
 	xmlEndpoint = '/fmws/serverinfo'
-	check_endpoint_status ('Port 1895, CWP - XML - Internal: ', intern_addr, xmlEndpoint, 954, port=1895)
+	if check_internal:
+		check_endpoint_status ('Port 1895, CWP - XML - Internal: ', intern_addr, xmlEndpoint, 954, port=1895)
 	check_endpoint_status ('Port 443, CWP - XML - External: ', extern_addr, xmlEndpoint, 954, useSSL=True)	# this may get removed
 
 	# WEBD
 	webdEndpoint = '/fmi/webd/'
-	check_endpoint_status ('Port 16021, WebDirect - Internal: ', intern_addr, webdEndpoint, 200, port=16021, as_error=False)
+	if check_internal:
+		check_endpoint_status ('Port 16021, WebDirect - Internal: ', intern_addr, webdEndpoint, 200, port=16021, as_error=False)
 	check_endpoint_status ('Port 443, WebDirect - External: ', extern_addr, webdEndpoint, 200, useSSL=True, as_error=False)
 
 	# WEBD INFO
-	check_webdirect_status(intern_addr, port=16002, useSSL=False)
+	if check_internal:
+		check_webdirect_status(intern_addr, port=16002, useSSL=False)
 	check_webdirect_status(extern_addr)
 
 	# alternate: curl -vk -X DELETE https://127.0.0.1/fmi/admin/api/v2/user/auth/abcdef0123456789
@@ -2611,7 +2650,7 @@ def init_parser() -> argparse.ArgumentParser:
 	parser.add_argument('-B', '--backups', action='store_true', help='list paths & sizes of backup sets')
 	parser.add_argument('-b', '--begin', nargs=1, help='start at first message on or after time or time interval')
 	parser.add_argument('--capture', nargs=1, metavar='ZIPFILE', help='save the named log files to a zip archive at the given path')
-	parser.add_argument('-C', '--check-connectivity', dest='check_connectivity', action='store_true', help='check connectivity of API endpoints')
+	parser.add_argument('-C', '--check-connectivity', dest='check_connectivity', nargs='?', const='', metavar='HOST', help='check connectivity of API endpoints, optionally using HOST for external tests')
 	parser.add_argument('-D', '--data', action='store_true', help='display database, container, document, and temp directory info')
 	parser.add_argument('--dir', nargs=1, help='print the directory path of the named log')
 	parser.add_argument('-e', '--edit', nargs=1, help='open the log file using the command defined by $EDITOR')
@@ -4372,8 +4411,8 @@ def handle_named_options (args) -> bool:
 		#print (args.begin[0])
 		TIMESTAMP_START = parse_begin_time (args.begin[0])
 
-	if args.check_connectivity:
-		check_connectivity()
+	if args.check_connectivity is not None:
+		check_connectivity(args.check_connectivity or None)
 		ignore_positionals = True
 
 	if args.data:

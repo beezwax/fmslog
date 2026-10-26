@@ -61,7 +61,8 @@ positional arguments (log name):
 options:
   -B, --backups             list scheduled backup sets present, including total number of files and size
   -b, --begin BEGIN         start at first message on or after time or time interval in BEGIN
-  -C, --check-connectivity	test connectivity to FMS components
+  -C, --check-connectivity [HOST]
+                            test connectivity to FMS components, optionally using HOST for only external tests
   --capture PATH            create a .zip file containing the named logs
   -D, --data                list directories being used for databases, external container data, documents, and temp files
   -e, --edit                open the log in a text editor; first try $EDITOR, then GUI editor (macOS), then nano
@@ -128,7 +129,12 @@ the boot drive had been renamed at some point.
 
 ### -C, --check-connectivity
 Verify connectivity to various server components, and display SSL TLS version and hostnames. Where possible, both internal and external interfaces are checked, since
-external connections are routed via a reverse proxy through the web server (Apache, IIS, NGINX). Also see the related -N/--network option.
+external connections are routed via a reverse proxy through the web server (Apache, IIS, NGINX). An optional IP address or hostname can be provided to use as the external test target; internal tests still use loopback. Also see the related -N/--network option.
+
+```sh
+fmslog --check-connectivity files.example.com
+fmslog -C 192.0.2.10
+```
 
 Testing after connecting to a VPN may interfere with the results.
 
