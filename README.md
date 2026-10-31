@@ -139,7 +139,11 @@ fmslog -C 192.0.2.10
 Testing after connecting to a VPN may interfere with the results.
 
 ### --capture ARCHIVEFILE
-Create a .zip file containing all of the named logs.
+Create a .zip file containing the named logs. With `-b`/`--begin`, timestamped logs
+start at the first message on or after the requested time; any preamble is omitted.
+Logs without supported timestamps are captured in full. Without `-b`, each log is
+captured in full. If a timestamped log has no messages at or after the requested
+time, it is also captured in full.
 
 ### -D, --data
 Using values based on the last relevant message in the Event log, display the current database directories being used and their sizes, splitting out any

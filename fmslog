@@ -7,7 +7,7 @@ Author: Simon Brown on 10/15/2025
 Purpose: Display FileMaker Server logs, change logging options, and get resource usage.
 """
 
-VERSION = "0.61 - 2026-10-26"
+VERSION = "0.62 - 2026-10-30"
 
 # Only using standard library modules.
 
@@ -38,6 +38,7 @@ import textwrap
 import threading
 import time
 import ssl
+from typing import Optional, Tuple
 import urllib.request, urllib.parse, urllib.error
 from contextlib import ExitStack
 
@@ -2048,6 +2049,61 @@ class FileMakerODataAPI:
 #	f i n d _ f i r s t _ t i m e s t a m p
 #
 
+def parse_log_timestamp (line: str) -> Optional[datetime.datetime]:
+	"""Return a log message timestamp when the line uses a supported format."""
+	try:
+		if line[4] == '-' and line [24] == '-':
+			# Access, ClientStats, Event, Stats, etc.
+			return datetime.datetime.fromisoformat(line [:23])
+		elif line[4] == '-' and line[10] == 'T':
+			# OData uses ISO timestamps with fractional seconds and an offset.
+			line_ts = datetime.datetime.fromisoformat(line.split()[0])
+			if line_ts.tzinfo is not None:
+				line_ts = line_ts.astimezone().replace(tzinfo=None)
+			return line_ts
+		elif line [4] == '/' and line [24] == ':':
+			return datetime.datetime.strptime(line [:24], "%Y/%m/%d %H:%M:%S.%f")
+		elif line [6] == ',' and line [22] in 'APM':
+			return datetime.datetime.strptime(line [:24].rstrip(), '%b %d, %Y %I:%M:%S %p')
+		elif line [:7] == 'Thrift:':
+			return datetime.datetime.strptime(line [8:32], '%a %b %d %H:%M:%S %Y')
+	except (IndexError, ValueError):
+		pass
+
+	if line[10:11] in ('', ' ', '\t', '\r', '\n'):
+		remainder = line[10:].lstrip()
+		if not re.match(r'\d{2}:\d{2}(?:[:\s]|$)', remainder):
+			try:
+				return datetime.datetime.strptime(line[:10], '%Y-%m-%d')
+			except ValueError:
+				pass
+
+	return None
+
+#
+#	s c a n _ f i r s t _ t i m e s t a m p
+#
+
+def scan_first_timestamp (file_path: str, timestamp: datetime.datetime) -> Tuple[int, bool]:
+	"""
+	Return the first matching line number and whether any supported timestamp exists.
+	"""
+	has_timestamps = False
+	with open(file_path, 'r', encoding='utf-8', errors='replace') as logfile:
+		for line_num, line in enumerate(logfile, start=1):
+			line_ts = parse_log_timestamp(line)
+			if line_ts is None:
+				continue
+			has_timestamps = True
+			if line_ts >= timestamp:
+				return line_num, has_timestamps
+
+	return -1, has_timestamps
+
+#
+#	f i n d _ f i r s t _ t i m e s t a m p
+#
+
 def find_first_timestamp (file_path: str, timestamp: datetime.datetime) -> int:
 	"""
 	Scan file until the first log timestamp equal or greater than the search
@@ -2056,51 +2112,31 @@ def find_first_timestamp (file_path: str, timestamp: datetime.datetime) -> int:
 	If a match is never found -1 is returned.
 	"""
 
-	line_result = -1
-	line_num = 0
+	return scan_first_timestamp(file_path, timestamp)[0]
 
-	while True:
-		line_ts = None
-		line_num += 1
-		line = linecache.getline (file_path, line_num)
-		if line == '': break
-		# Sniff the line to guess the date format.
-		try:
-			if line[4] == '-' and line [24] == '-':
-				# Access, ClientStats, Event, Stats, etc.
-				# 2025-10-27 04:13:24.101 -0700	Information	228	tool.beezwax.net	The previous log file reached maximum size, and was renamed to "Access-old.log".
-				line_ts = datetime.datetime.fromisoformat(line [:23])
-			elif line[4] == '-' and line[10] == 'T':
-				# OData uses ISO timestamps with fractional seconds and an offset.
-				line_ts = datetime.datetime.fromisoformat(line.split()[0])
-				if line_ts.tzinfo is not None:
-					line_ts = line_ts.astimezone().replace(tzinfo=None)
-			elif line [4] == '/' and line [24] == ':':
-				# 2025/10/25 17:49:09.0162
-				line_ts = datetime.datetime.strptime(line [:24], "%Y/%m/%d %H:%M:%S.%f")
-			elif line [6] == ',' and line [22] in 'APM':
-				# Sep 11, 2025 12:40:52 PM org.atmosphere.cpr.AtmosphereFramework addInterceptorToAllWrappers
-				# Oct 22, 2025 2:16:56 PM org.atmosphere.util.IOUtils guestRawServletPath
-				line_ts = datetime.datetime.strptime(line [:24].rstrip(), '%b %d, %Y %I:%M:%S %p')
-			elif line [:7] == 'Thrift:':
-				# Thrift: Sat Jun  7 10:47:03 2025
-				line_ts = datetime.datetime.strptime (line [8:32], '%a %b %d %H:%M:%S %Y')
-			else:
-				continue
-		
-		# Skip over any lines that have too few characters (very few) or where we can't evaluate date.
-		
-		except IndexError:
-			continue
-		#except ValueError:
-		#	continue
+#
+#	w r i t e _ l o g _ t o _ z i p
+#
 
-		# If we reached the timestamp, go into next while loop to match by text value.
-		if line_ts and line_ts >= timestamp:
-			line_result = line_num
-			break
-	
-	return line_result
+def write_log_to_zip (zipf: zipfile.ZipFile, file_path: str, archive_name: str,
+		timestamp: Optional[datetime.datetime]) -> None:
+	"""Add a whole log, or its timestamp-selected portion, to a ZIP archive."""
+	if timestamp is None:
+		zipf.write(file_path, arcname=archive_name)
+		return
+
+	start_line, has_timestamps = scan_first_timestamp(file_path, timestamp)
+	if not has_timestamps or start_line < 0:
+		zipf.write(file_path, arcname=archive_name)
+		return
+
+	# Output the portion of the log starting from the first matching timestamp to the ZIP archive.
+	with zipf.open(archive_name, 'w') as archive_file:
+		# Non-UTF8 characters will be replaced with the Unicode replacement character.
+		with open(file_path, 'r', encoding='utf-8', errors='replace', newline='') as logfile:
+			for line_num, line in enumerate(logfile, start=1):
+				if line_num >= start_line:
+					archive_file.write(line.encode('utf-8'))
 
 #
 #	f m s a d m i n _ t o g g l e _ l o g
@@ -2649,7 +2685,7 @@ def init_parser() -> argparse.ArgumentParser:
 
 	parser.add_argument('-B', '--backups', action='store_true', help='list paths & sizes of backup sets')
 	parser.add_argument('-b', '--begin', nargs=1, help='start at first message on or after time or time interval')
-	parser.add_argument('--capture', nargs=1, metavar='ZIPFILE', help='save the named log files to a zip archive at the given path')
+	parser.add_argument('--capture', nargs=1, metavar='ZIPFILE', help='save named logs to a zip archive; use -b to start at a timestamp')
 	parser.add_argument('-C', '--check-connectivity', dest='check_connectivity', nargs='?', const='', metavar='HOST', help='check connectivity of API endpoints, optionally using HOST for external tests')
 	parser.add_argument('-D', '--data', action='store_true', help='display database, container, document, and temp directory info')
 	parser.add_argument('--dir', nargs=1, help='print the directory path of the named log')
@@ -4123,6 +4159,8 @@ def read_tail_time (file_path: str, lines_from_end: int) -> list:
 	# that is on or after our start date.
 
 	line_num = find_first_timestamp (file_path, TIMESTAMP_START)
+	if line_num < 1:
+		return matching
 
 	# Find the last line
 	while True:
@@ -4536,7 +4574,6 @@ def main():
 		# CAPTURE LOGS TO ZIP
 
 		if CAPTURE_PATH:
-			# Ideally, future version would honor the -b option and only capture logs after that timestamp.
 			zip_path = CAPTURE_PATH if CAPTURE_PATH.endswith('.zip') else CAPTURE_PATH + '.zip'
 			try:
 				with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -4545,7 +4582,7 @@ def main():
 						if log_path:
 							try:
 								check_file_validity(log_path)
-								zf.write(log_path, arcname=os.path.basename(log_path))
+								write_log_to_zip(zf, log_path, os.path.basename(log_path), TIMESTAMP_START)
 								print(f'   Added: {log_path}')
 							except FileCheckError as e:
 								print(f'   Warning: {e}')
