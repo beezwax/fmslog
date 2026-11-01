@@ -63,7 +63,7 @@ options:
   -b, --begin BEGIN         start at first message on or after time or time interval in BEGIN
   -C, --check-connectivity [HOST]
                             test connectivity to FMS components, optionally using HOST for only external tests
-  --capture PATH            create a .zip file containing the named logs
+  --capture PATH            create a .zip file containing the named logs; use -b/--begin to start logs at a given timestamp when possible
   -D, --data                list directories being used for databases, external container data, documents, and temp files
   -e, --edit                open the log in a text editor; first try $EDITOR, then GUI editor (macOS), then nano
   -f, --filter FILTER       only return lines matching regex expression FILTER
@@ -94,7 +94,9 @@ options:
 ---
 
 ### -b, --begin
-Start printing logs on or after the given time or duration. Durations are an optional number followed by:
+Start printing logs on or after the given time or duration.
+
+Durations are an optional number followed by:
 - 's': seconds ago
 - 'm': minutes ago
 - 'h': hours ago
@@ -115,6 +117,8 @@ fmslog --begin 2025-11-04 event
 ```
 
 Normally, one screen full of output starting at earliest message is output. Use the -n option to change this.
+
+Some logs may not have any timestamps, or may use them inconsistently. This may result in output going off the last time stamp found, or including the entire file.
 
 ### -B, --backups
 

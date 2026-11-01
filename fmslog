@@ -2086,9 +2086,11 @@ def parse_log_timestamp (line: str) -> Optional[datetime.datetime]:
 
 def scan_first_timestamp (file_path: str, timestamp: datetime.datetime) -> Tuple[int, bool]:
 	"""
-	Return the first matching line number and whether any supported timestamp exists.
+	Return the first line at or after the timestamp, or the last earlier timestamped line.
+	Also return whether any supported timestamp exists.
 	"""
 	has_timestamps = False
+	last_before_timestamp_line = -1
 	with open(file_path, 'r', encoding='utf-8', errors='replace') as logfile:
 		for line_num, line in enumerate(logfile, start=1):
 			line_ts = parse_log_timestamp(line)
@@ -2097,8 +2099,9 @@ def scan_first_timestamp (file_path: str, timestamp: datetime.datetime) -> Tuple
 			has_timestamps = True
 			if line_ts >= timestamp:
 				return line_num, has_timestamps
+			last_before_timestamp_line = line_num
 
-	return -1, has_timestamps
+	return last_before_timestamp_line, has_timestamps
 
 #
 #	f i n d _ f i r s t _ t i m e s t a m p
