@@ -6,11 +6,11 @@ Some things that it does that using just tail, head, or Get-Content don't:
 - quickly display or open logs in editor (don't have to type full log path)
 - limit messages to those only after a given timestamp or duration
 - lists path, size, and modification dates for all logs
-- optionally truncate lines to avoid line wrap
 - FMS processes and network ports in use
 - disk space used for data, cache, and backup directories
 - connectivity tests for 10 different FMS endpoints
 - list versions of FMS components (NodeJS, Tomcat, etc.)
+- capture copies of log files
 
 Design Goals:
 - very simple installation
@@ -228,12 +228,20 @@ Print messages as they are added to log files until user cancels with Ctrl-C.
 
 Use the form `--tail=<seconds>` to set how many seconds to wait between checks for new data.
 
-### --test-odata
-Runs various operations in the test file to verify functionality. You must specify the account (-u) and the password (-p) before the `--test-odata` option.
+### --test-dapi
+Runs various operations in the test file to verify Data API functionality. You must specify the account (-u) and the password (-p) before the `--test-dapi` option.
 
 After hosting the API_Testing file, a complete test command looks like this:
 ```sh
-fmslog --test-odata -u api-test -p fmslog-access
+fmslog --test-dapi -u api-test -p fmslog-access
+```
+
+### --test-odata
+Runs various operations in the test file to verify OData functionality. You must specify the account (-u) and the password (-p) before the `--test-odata` option.
+
+After hosting the API_Testing file, a complete test command looks like this:
+```sh
+time fmslog --test-odata -u api-test -p fmslog-access
 ```
 
 The optional `time` command in the above example provides additional stats on CPU usage and how long the test took to complete.
