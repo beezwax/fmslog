@@ -89,6 +89,7 @@ options:
   --test-odata              perform various operations using the OData API; requires the API_Testing file to be hosted on the server
   --truncate                cut off any output if beyond width of screen
   -u                        account name to use for FMS console or API testing file
+  -w, --watch-path          check for changes to a file or directory every 10 seconds, logging each change as it happens
   -V, --version             version info for fmslog and FMS components
 ```
 
@@ -267,6 +268,8 @@ such as Java installed without using the FMS admin console.
 ![alt](display_logs.png?raw=true "Display Logs")
 
 ![alt](connectivity_check.png?raw=true "Connectivity Test")
+
+![alt](watch_file_directory.png?raw=true "Watch Path")
 
 ---
 

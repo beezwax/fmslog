@@ -14,7 +14,9 @@ VERSION = "0.63 - 2026-11-07"
 import argparse
 import base64
 #import curses
+from collections import defaultdict
 import datetime
+import math
 import zipfile
 from enum import Enum
 import glob
@@ -30,6 +32,7 @@ import random
 import re
 import shutil
 import socket
+import stat
 import string
 import subprocess
 import sys
@@ -629,6 +632,7 @@ CLARIS_CONFIG = """
 """
 
 class TerminalColors:
+	BLACK = '\033[30m'
 	PURPLE = '\033[95m'
 	CYAN = '\033[96m'
 	DARKCYAN = '\033[36m'
@@ -637,6 +641,13 @@ class TerminalColors:
 	LIGHT_GRAY = '\033[37m'
 	YELLOW = '\033[93m'
 	RED = '\033[91m'
+	BG_RED = '\033[41m'
+	BG_GREEN = '\033[42m'
+	BG_YELLOW = '\033[43m'
+	BG_BLUE = '\033[44m'
+	BG_PURPLE = '\033[45m'
+	BG_CYAN = '\033[46m'
+	BG_WHITE = '\033[47m'
 	BOLD = '\033[1m'
 	UNDERLINE = '\033[4m'
 	END = '\033[0m'
@@ -2740,6 +2751,8 @@ def init_parser() -> argparse.ArgumentParser:
 	parser.add_argument('--truncate', action='store_true', help='cut off any output if beyond width of screen')
 	parser.add_argument('-u', '--user', help='account name to use for FMS console or API test file')
 	parser.add_argument('-V', '--version', action='store_true', help='version info for fmslog and FMS')
+	parser.add_argument('-w', '--watch-path', nargs=1, help='watch path for changes to file system')
+
 	# Hack to avoid error if there is only an option specified but no positional argument
 	parser.add_argument('logs', nargs='*', help='log name to display')
 
@@ -4343,8 +4356,11 @@ def sudo_preflight():
 	except KeyboardInterrupt:
 		sys.exit(0)
 
-
 # =================
+
+#
+#	T a i l P r i n t
+#
 
 class TailPrint:
 	
@@ -4434,6 +4450,144 @@ class TailPrint:
 
 # =================
 
+#
+#	w a t c h _ f i l e _ s y s t e m
+#
+
+def watch_file_system(paths, interval: float = 1.0) -> None:
+	"""
+	Watch one or more files or directories and print changes at each interval.
+	Changes beneath directories more than two levels below are summarized.
+	Press Ctrl-C to stop watching.
+	"""
+
+	if isinstance(paths, (str, os.PathLike)):
+		paths = [paths]
+	else:
+		paths = list(paths)
+	if not paths:
+		raise ValueError('At least one path is required')
+
+	paths = list(dict.fromkeys(os.path.abspath(os.path.expanduser(os.fspath(path))) for path in paths))
+	interval = float(interval)
+	if not math.isfinite(interval) or interval <= 0:
+		raise ValueError('The interval must be a positive finite number')
+	for path in paths:
+		if not os.path.lexists(path):
+			raise FileNotFoundError(path)
+
+	def snapshot():
+		entries = {}
+
+		def visit(path):
+			try:
+				info = os.stat(path, follow_symlinks=False)
+			except FileNotFoundError:
+				return
+
+			kind = 'directory' if stat.S_ISDIR(info.st_mode) else 'file'
+			if kind == 'directory':
+				entries[path] = (kind, 0, 0)
+				try:
+					with os.scandir(path) as children:
+						for child in children:
+							visit(child.path)
+				except FileNotFoundError:
+					entries.pop(path, None)
+			else:
+				entries[path] = (kind, info.st_size, info.st_mtime_ns)
+
+		for root in paths:
+			visit(root)
+		return entries
+
+	def root_for(path):
+		matching_roots = []
+		for root in paths:
+			try:
+				if path == root or os.path.commonpath((root, path)) == root:
+					matching_roots.append(root)
+			except ValueError:
+				continue
+		return max(matching_roots, key=len)
+
+	def change_depth(path, kind, root):
+		directory = path if kind == 'directory' else os.path.dirname(path)
+		relative = os.path.relpath(directory, root)
+		parts = [] if relative == os.curdir else relative.split(os.sep)
+		return len(parts), parts
+
+	previous = snapshot()
+
+	try:
+		while True:
+			time.sleep(interval)
+			current = snapshot()
+			summaries = defaultdict(int)
+			shallow_changes = []
+
+			for path in sorted(previous.keys() | current.keys()):
+				before = previous.get(path)
+				after = current.get(path)
+				if before is None:
+					action, kind = 'created', after[0]
+				elif after is None:
+					action, kind = 'deleted', before[0]
+				elif before != after:
+					action, kind = 'modified', after[0]
+				else:
+					continue
+
+				root = root_for(path)
+				depth, parts = change_depth(path, kind, root)
+				if depth > 2:
+					group = os.path.join(root, *parts[:3])
+					summaries[(group, kind, action)] += 1
+				else:
+					shallow_changes.append((action, kind, path))
+
+			action_order = {'created': 0, 'modified': 1, 'deleted': 2}
+			kind_order = {'file': 0, 'directory': 1}
+			summary_lines = []
+			for (group, kind, action), count in summaries.items():
+				summary_lines.append((group, action, kind, count))
+			summary_lines.sort(key=lambda item: (
+				item[0], action_order[item[1]], kind_order[item[2]]))
+
+			if shallow_changes or summary_lines:
+				timestamp = datetime.datetime.now().astimezone().isoformat(timespec='seconds')
+				print(timestamp)
+				action_styles = {
+					'deleted': ('DELETE', TerminalColors.BG_RED),
+					'modified': ('MODIFY', TerminalColors.BG_YELLOW),
+					'created': ('CREATE', TerminalColors.BG_GREEN),
+				}
+				type_styles = {
+					'directory': ('DIR', TerminalColors.BG_PURPLE),
+					'file': ('FILE', TerminalColors.BG_CYAN),
+				}
+
+				def print_change(action, kind, count, path):
+					action_label, action_background = action_styles[action]
+					type_label, type_background = type_styles[kind]
+					print(
+						f'{TerminalColors.BLACK}{action_background}{action_label:<6}{TerminalColors.END} '
+						f'{TerminalColors.BLACK}{type_background}{type_label:<4}{TerminalColors.END} '
+						f'{TerminalColors.BLACK}{TerminalColors.BG_WHITE}{count:>7}{TerminalColors.END}  {path}'
+					)
+
+				for action, kind, path in shallow_changes:
+					print_change(action, kind, 1, path)
+				for group, action, kind, count in summary_lines:
+					print_change(action, kind, count, group)
+
+			previous = current
+	except KeyboardInterrupt:
+		return
+
+#
+#	h a n d l e _ n a m e d _ o p t i o n s
+#
 
 def handle_named_options (args) -> bool:
 	"""
@@ -4520,6 +4674,11 @@ def handle_named_options (args) -> bool:
 
 	if args.test_odata:
 		test_odata_functions()
+		ignore_positionals = True
+
+	if args.watch:
+		#print (args.begin[0])
+		watch_file_system(args.watch, 10)
 		ignore_positionals = True
 
 	if args.version:
