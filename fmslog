@@ -7,7 +7,7 @@ Author: Simon Brown on 10/15/2025
 Purpose: Display FileMaker Server logs, change logging options, and get resource usage.
 """
 
-VERSION = "0.62 - 2026-10-30"
+VERSION = "0.63 - 2026-11-07"
 
 # Only using standard library modules.
 
@@ -485,6 +485,7 @@ LOG_SPECS_LINUX = {
 	'fmshelper': {
 		'path': 'Logs/fmshelper.log',
 		'lghd': True,
+		'head': 'fmshelper.log',
 			# This log has no consistent format
 			#		2025-08-03 20:12:38.182 -0700   Log file /opt/FileMaker/FileMaker Server/Logs/fmshelper.log size: 478 bytes (0 MB), threshold ratio: 0
 			#		2025-08-03 20:12:38.185 -0700 === stopSystemWebServer()
@@ -493,7 +494,6 @@ LOG_SPECS_LINUX = {
 			#		127.0.0.1 POST /fmi/admin/internal/v1/dbs-notification/xPR2AgRM1TODanCZ56eikiYXcbzvTDdtLIbd9Avs3Z4kuxie - - - ms
 			#		Aug 03, 2025 8:12:53 PM org.apache.jasper.servlet.TldScanner scanJars
 			#		2025/08/03 20:39:27.0128: [ 2525]:    TRACE:       mongoc: ENTRY: _mongoc_linux_distro_scanner_get_distro():389
-		'head': None,
 		'tbst': []	# replace any tabs with two spaces
 	},
 	
@@ -659,7 +659,7 @@ def calc_row_metrics (num_logs, log_lines_count_val) -> tuple:
 		screens_num_str = log_lines_count_val.replace('s','')
 		num_mode = 's'
 
-		screens_num = 1		# just an 's' by itself counts as 1'
+		screens_num = 1		# default value if only 's' is provided
 		
 		try:
 			screens_num = int (screens_num_str)
@@ -1088,7 +1088,7 @@ def claris_config_remove(target_dir: str) -> bool:
 	try:
 		os.remove(backup_path)
 	except FileNotFoundError:
-		pass
+		pass # No previous backup to remove.
 	
 	try:
 		shutil.move(config_path, backup_path)
@@ -1127,9 +1127,9 @@ def claris_config_write(target_dir: str) -> bool:
 			backup_path = config_path + '.bak'
 			shutil.move(config_path, backup_path)
 		except FileNotFoundError:
-			pass
+			pass # No existing config file to move aside
 		except FileExistsError:
-			pass
+			pass # Backup file already exists
 
 		with open(config_path, 'w', encoding='utf-8') as f:
 			f.write(CLARIS_CONFIG)
@@ -1145,6 +1145,27 @@ def claris_config_write(target_dir: str) -> bool:
 		return False
 	
 	return True
+
+#
+#	c l o s e _ d a t a b a s e _ f i l e s
+#
+
+def close_database_files():
+	"""
+	Send a signal to FMS to close any open database files.
+	Note: There may be no Windows equivalent for this operation.
+	"""
+
+	fms_pid = get_fmserverd_pid()
+	if fms_pid:
+		print ('Sending signal to close databases...', end='', flush=True)
+		if send_signal_to_process (fms_pid):	# send USR1 to close files
+			print ('done')
+			# Wait a few seconds for the process to close files before proceeding to next action.
+			time.sleep(2)
+		else:
+			print_warning ('failed')
+
 
 #
 #	c o m p i l e _ f i l t e r
@@ -1674,7 +1695,7 @@ class FileMakerDAPI:
 			print(f"URL Error: {e.reason}")
 			raise
 
-	def authenticate(self) -> str:
+	def authenticate(self) -> str | None:
 		"""
 		Authenticate to the FileMaker Data API and obtain an access token.
 		Returns authentication token, or None on failure.
@@ -1909,8 +1930,8 @@ class FileMakerODataAPI:
 		except urllib.error.URLError as e:
 			print(f"URL Error: {e.reason}")
 			raise
-
-		return None
+		finally:
+			return None
 
 
 	def execute_script(self, script_name: str, parameter: str) -> str:
@@ -2394,7 +2415,7 @@ def get_tomcat_version() -> str:
 				return java_missing_str
 
 	except FileNotFoundError:
-		pass
+		pass	# Use default value if Java not found
 	
 	if tomcat_out:
 		return re.search (r'Server number:  (.*)', tomcat_out).group(1)
@@ -2699,6 +2720,7 @@ def init_parser() -> argparse.ArgumentParser:
 	parser.add_argument('--help', action='help', help='display command details')
 	parser.add_argument('--host-info', action='store_true', help='display host details from the fmsadmin CLI and the Admin API')
 	parser.add_argument('-i', '--ignore-case', action='store_true', help='ignore case with filter')
+	parser.add_argument('-k', '--close-files', action='store_true', help='close any open database files')
 	parser.add_argument('-L', '--list', action='store_true', help='list all log files, including size, date created & modified, sorted by modification time')
 	parser.add_argument('-m', '--merge', action='store_true', help='combine output of two or more logs based on the message timestamps')
 	parser.add_argument('-n', '--number', nargs=1, default=['1s'], help='number of lines to print')
@@ -2888,15 +2910,7 @@ def manage_fms_service (action: str) -> bool:
 
 		if action == 'stop' or action == 'restart':
 			if fms_pid:
-				print ('Attempting to close databases before stopping FMS...', end='', flush=True)
-				if send_signal_to_process (fms_pid):	# send USR1 to close files
-					print ('done')
-					# Wait a few seconds for the process to close files before stopping the service.
-					time.sleep(2)
-				else:
-					print_warning ('failed')
 				print ('Stopping FMS service...', end='', flush=True)
-
 			else:
 				print_warning ('The fmserverd process is not currently running')
 				print ('Proceeding to stop the service...',end='', flush=True)
@@ -2934,7 +2948,7 @@ def manage_fms_service (action: str) -> bool:
 #	p a r s e _ b e g i n _ t i m e
 #
 
-def parse_begin_time (time_str: str) -> datetime.datetime:
+def parse_begin_time (time_str: str) -> datetime.datetime | None:
 	"""
 	Convert the various possible time values into a timestamp value. Some
 	possible values could be '30s' for 30 seconds ago, or '14:00:10'
@@ -3617,9 +3631,7 @@ def print_file_head_faster (file_path: str, lines: int) -> bool:
 			lines = logfile.readlines (MAX_READ_LEN)
 			for line in lines[0:SCREENROWS-1]:
 				print (line, end="")
-			#STDSCR.erase()
-			#for line in lines:
-			#    STDSCR.addstr(line)
+
 			result = True
 			if len (lines) == MAX_READ_LEN:
 				# indicate that we reached read limit
@@ -4370,7 +4382,7 @@ class TailPrint:
 			with ExitStack() as stack:
 				#with open(self.tailed_file) as file_:
 				file_list = [stack.enter_context(open (fpath, 'r', encoding='utf-8')) for fpath in self.log_paths]
-				# Files will be closed when Python exits.
+				# Files will be closed when the ExitStack context exits.
 				for file in file_list:
 					file.seek(0,2)
 				
@@ -4456,6 +4468,9 @@ def handle_named_options (args) -> bool:
 		check_connectivity(args.check_connectivity or None)
 		ignore_positionals = True
 
+	if args.close_files:
+		close_database_files()
+
 	if args.data:
 		print_data_dirs_info()
 		ignore_positionals = True
@@ -4483,12 +4498,12 @@ def handle_named_options (args) -> bool:
 		process_info()
 		ignore_positionals = True
 
-	if args.set:
-		handle_set (args.set[0], args.set[1])
-		ignore_positionals = True
-
 	if args.restart_fms:
 		manage_fms_service('restart')
+		ignore_positionals = True
+
+	if args.set:
+		handle_set (args.set[0], args.set[1])
 		ignore_positionals = True
 
 	if args.start_fms:

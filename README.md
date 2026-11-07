@@ -73,6 +73,7 @@ options:
   -H, --headers-off         turn off headers for all logs
   --host-info               extended list of server configuration settings using the CLI and FMS Admin API; requires admin console credentials (-u and -p)
   -i, --ignore-case         make filter's regex case insensitive
+  -k, --close-databases     close any open databases
   -L, --list                list all log files and crash reports, including size, date created & modified, sorted by modification time
   -n, --number RANGE        quantity of lines to print
   -N, --network             network usage info
@@ -190,6 +191,9 @@ Normally, unless tailing a log or printing a log that does not have any fixed co
 
 ### -i, --ignore-case
 If using the -f/--filter option, this option will cause any pattern searches to be case insensitive.
+
+### -k, --close-databases
+Send signal to fmserverd process to close any open databases. This will occur asynchronously.
 
 ### -L, --list
 List all log names and paths for the current platform. For logs that are present, list their creation and modification timestamps and their size.
