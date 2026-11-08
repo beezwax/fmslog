@@ -4523,6 +4523,9 @@ def watch_file_system(paths, interval: float = 1.0) -> None:
 	previous = snapshot()
 
 	try:
+		action_order = {'C': 0, 'M': 1, 'D': 2}  # Create, Modify, Delete
+		kind_order = {'file': 0, 'directory': 1}
+
 		while True:
 			time.sleep(interval)
 			current = snapshot()
@@ -4533,11 +4536,11 @@ def watch_file_system(paths, interval: float = 1.0) -> None:
 				before = previous.get(path)
 				after = current.get(path)
 				if before is None:
-					action, kind = 'created', after[0]
+					action, kind = 'C', after[0]
 				elif after is None:
-					action, kind = 'deleted', before[0]
+					action, kind = 'D', before[0]
 				elif before != after:
-					action, kind = 'modified', after[0]
+					action, kind = 'M', after[0]
 				else:
 					continue
 
@@ -4549,8 +4552,6 @@ def watch_file_system(paths, interval: float = 1.0) -> None:
 				else:
 					shallow_changes.append((action, kind, path))
 
-			action_order = {'created': 0, 'modified': 1, 'deleted': 2}
-			kind_order = {'file': 0, 'directory': 1}
 			summary_lines = []
 			for (group, kind, action), count in summaries.items():
 				summary_lines.append((group, action, kind, count))
@@ -4558,12 +4559,12 @@ def watch_file_system(paths, interval: float = 1.0) -> None:
 				item[0], action_order[item[1]], kind_order[item[2]]))
 
 			if shallow_changes or summary_lines:
-				timestamp = datetime.datetime.now().astimezone().isoformat(timespec='seconds')
+				timestamp = datetime.datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S')
 				print(timestamp)
 				action_styles = {
-					'deleted': ('DELETE', TerminalColors.BG_RED),
-					'modified': ('MODIFY', TerminalColors.BG_YELLOW),
-					'created': ('CREATE', TerminalColors.BG_GREEN),
+					'D': ('DELETE', TerminalColors.BG_RED),
+					'M': ('MODIFY', TerminalColors.BG_YELLOW),
+					'C': ('CREATE', TerminalColors.BG_GREEN),
 				}
 				type_styles = {
 					'directory': ('DIR', TerminalColors.BG_PURPLE),
