@@ -2751,7 +2751,7 @@ def init_parser() -> argparse.ArgumentParser:
 	parser.add_argument('--truncate', action='store_true', help='cut off any output if beyond width of screen')
 	parser.add_argument('-u', '--user', help='account name to use for FMS console or API test file')
 	parser.add_argument('-V', '--version', action='store_true', help='version info for fmslog and FMS')
-	parser.add_argument('-w', '--watch-path', nargs=1, help='watch path for changes to file system')
+	parser.add_argument('-w', '--watch-path', nargs='+', help='watch one or more paths for file system changes')
 
 	# Hack to avoid error if there is only an option specified but no positional argument
 	parser.add_argument('logs', nargs='*', help='log name to display')
@@ -4468,7 +4468,8 @@ def watch_file_system(paths, interval: float = 1.0) -> None:
 	if not paths:
 		raise ValueError('At least one path is required')
 
-	paths = list(dict.fromkeys(os.path.abspath(os.path.expanduser(os.fspath(path))) for path in paths))
+	paths = list(dict.fromkeys(
+		os.path.realpath(os.path.expanduser(os.fspath(path))) for path in paths))
 	interval = float(interval)
 	if not math.isfinite(interval) or interval <= 0:
 		raise ValueError('The interval must be a positive finite number')
@@ -4494,6 +4495,8 @@ def watch_file_system(paths, interval: float = 1.0) -> None:
 							visit(child.path)
 				except FileNotFoundError:
 					entries.pop(path, None)
+				except PermissionError:
+					pass
 			else:
 				entries[path] = (kind, info.st_size, info.st_mtime_ns)
 
@@ -4676,9 +4679,8 @@ def handle_named_options (args) -> bool:
 		test_odata_functions()
 		ignore_positionals = True
 
-	if args.watch:
-		#print (args.begin[0])
-		watch_file_system(args.watch, 10)
+	if args.watch_path:
+		watch_file_system(args.watch_path, 10)
 		ignore_positionals = True
 
 	if args.version:

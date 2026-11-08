@@ -257,6 +257,9 @@ Remove any output from the end of the line that would cause a line wrap for the 
 ### -u USER
 Used to specify the account/user name for FMS admin console or API testing file access.
 
+### -w --watch-path
+Check the given path(s) for changes every 10 seconds. If the path is a directory, changes more than two levels deep are summarized.
+
 ### -V, --version
 Print version of fmslog command and FileMaker Server components. May not handle all use cases,
 such as Java installed without using the FMS admin console.
