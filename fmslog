@@ -7,7 +7,7 @@ Author: Simon Brown on 10/15/2025
 Purpose: Display FileMaker Server logs, change logging options, and get resource usage.
 """
 
-VERSION = "0.63 - 2026-11-07"
+VERSION = "0.64 - 2026-11-07"
 
 # Only using standard library modules.
 
@@ -3209,12 +3209,12 @@ def print_crash_reports() -> str:
 	if fmserver_files:
 		# Sort by modification time (most recent first)
 		fmserver_files.sort(key=lambda x: x[2], reverse=True)
-		
-		print(f"{'FILE':50}  {'SIZE':>16}  {'MODIFIED':20}")
-		print('-' * 95)
+		# Crash report files can have very long filenames.
+		print(f"{'FILE':78}  {'SIZE':>16}  {'MODIFIED':20}")
+		print('-' * 115)
 		# Getting creation timestamp would be preferred, but problematic on Linux.
 		for filename, size, mtime in fmserver_files:
-			print(f'{filename:50}  {size:16,}  {mtime.strftime("%Y-%m-%d %H:%M:%S")}')
+			print(f'{filename:78}  {size:16,}  {mtime.strftime("%Y-%m-%d %H:%M:%S")}')
 		print()
 	else:
 		print("No crash logs found for fmserver user")
