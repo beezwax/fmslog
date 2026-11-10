@@ -7,7 +7,7 @@ Author: Simon Brown on 10/15/2025
 Purpose: Display FileMaker Server logs, change logging options, and get resource usage.
 """
 
-VERSION = "0.64 - 2026-11-07"
+VERSION = "0.65 - 2026-11-10"
 
 # Only using standard library modules.
 
@@ -1293,7 +1293,10 @@ def expand_tabs_for_line (log_name: str, line: str) -> str:
 	
 	if isinstance(tabstops, int):
 		# All tab stops are the same size.
-		return line.expandtabs(tabstops)
+		line = line.expandtabs(tabstops)
+		if TRUNCATE_MODE and len(line) > SCREENCOLS:
+			return line[:SCREENCOLS-1] + "…\n"
+		return line
 
 	if log_name in ['admin','adminapi']:
 		# This log doesn't use tabs, but instead uses 2 or 3 spaces to separate columns.
@@ -1323,7 +1326,7 @@ def expand_tabs_for_line (log_name: str, line: str) -> str:
 
 	parts = line.split('\t')
 
-	col = 0
+	col = 0 # current column position, not the tab stop index
 	tab_iter = iter(tabstops)
 	next_tab = next(tab_iter, None)
 	for i, part in enumerate(parts):
@@ -1336,8 +1339,9 @@ def expand_tabs_for_line (log_name: str, line: str) -> str:
 				col = next_tab
 				next_tab = next(tab_iter, None)
 			else:
-				result.append('  ')	# pad two spaces if no stop specified
-				col += 1
+				# Some logs may not have a tab stop specified, so pad two spaces if no tab stop specified.
+				result.append('  ')
+				col += 2 # we added two spaces
 
 	if TRUNCATE_MODE:
 		line = ''.join(result)
@@ -1886,7 +1890,7 @@ class FileMakerODataAPI:
 		self.ssl_context.check_hostname = False
 		self.ssl_context.verify_mode = ssl.CERT_NONE
 
-	def _make_ppp_request(self, endpoint, method='GET', data=None):
+	def _make_ppp_request(self, endpoint, method='GET', data=None) -> dict | None:
 		"""
 		Make a Post, Patch, or Put request to FileMaker's OData interface.
 			endpoint: API endpoint path
@@ -1923,16 +1927,14 @@ class FileMakerODataAPI:
 			headers=headers,
 			method=method
 		)
-        
+
+		response_data = None
+
 		try:
 			# Make request with SSL context
 			response = urllib.request.urlopen(request, context=self.ssl_context)
 			response_data = response.read().decode('utf-8')
-			
-			if response_data:
-				return json.loads(response_data)
-			return None
-			
+
 		except urllib.error.HTTPError as e:
 			error_body = e.read().decode('utf-8')
 			print(f"HTTP Error {e.code}: {e.reason}")
@@ -1941,7 +1943,10 @@ class FileMakerODataAPI:
 		except urllib.error.URLError as e:
 			print(f"URL Error: {e.reason}")
 			raise
-		finally:
+
+		if response_data:
+			return json.loads(response_data)
+		else:
 			return None
 
 
@@ -2038,7 +2043,7 @@ class FileMakerODataAPI:
 
 		OData template: https://host/fmi/odata/version/database-name/table-name(primary-key-value)
 		"""
-		endpoint = f'/{urllib.parse.quote(self.table)}({id})'
+		endpoint = f'/{urllib.parse.quote(table)}({id})'
 		record = {field:value}
 		
 		# Send PATCH request to update the record
@@ -2197,7 +2202,7 @@ def fmsadmin_toggle_log (fm_logname: str, enable_flag: bool, user: str, password
 	else:
 		verb_str = 'disable'
 
-	print ('COMMAND: fmsadmin', verb_str, fm_logname, '-u', user, '-p', password)
+	#print ('COMMAND: fmsadmin', verb_str, fm_logname, '-u', user, '-p', '*' * len(password))
 
 	fmsadmin_proc = subprocess.run(
 		['fmsadmin', verb_str, fm_logname, '-u', user, '-p', password],
@@ -2518,7 +2523,8 @@ def get_local_ip() -> str:
 			if ip not in ipv4 and not ip.startswith('127.'):
 				ipv4.append(ip)
 		elif protocol == socket.AddressFamily.AF_INET6:
-			if ip not in ipv6 and (not ip.startswith('::1') or ip.startswith('fe80:')):
+			# fe80: and ::1 are both link-local or loopback addresses, ignore them.
+			if ip not in ipv6 and not ip.startswith('::1') and not ip.startswith('fe80:'):
 				ipv6.append(ip)
 	
 	if ipv4:
@@ -2742,6 +2748,7 @@ def init_parser() -> argparse.ArgumentParser:
 	parser.add_argument('-s', '--succinct', action='store_true', help='strip less useful details from log output')
 	#parser.add_argument('--ssh', nargs=1, help='use the connection string to fetch logs from remote server')
 	parser.add_argument('--restart-fms', action='store_true', help='restart the FileMaker Server service')
+	parser.add_argument('--scheduled-script-runs', action='store_true', help='list script schedule runs')
 	parser.add_argument('--start-fms', action='store_true', help='start the FileMaker Server service')
 	parser.add_argument('--stop-fms', action='store_true', help='stop the FileMaker Server service')
 	parser.add_argument('-t', '--tail', dest='tail', action='store_true', help='wait for any new messages')
@@ -3615,7 +3622,7 @@ def print_log_header (log_name:str, succinct: bool) -> int:
 		else:
 			header_str = LOG_SPECS [log_name]['head']
 	except:
-		pass
+		pass # If any errors use the default values.
 
 	if header_str:
 		line_count = 1 + header_str.count ('\n')
@@ -3719,7 +3726,82 @@ def print_head (log_name: str, count: int, header: bool, succinct: bool) -> int:
 
 	return len (line_list) + header_count
 
+#
+#	p r i n t _ s c h e d u l e d _ s c r i p t _ r u n s
+#
 
+def print_scheduled_script_runs (log_path: str = None):
+	"""
+	Scan Event.log and print the start time, duration, schedule name, and
+	FileMaker script name of every script schedule run. Backup and other
+	non-script schedules are skipped.
+
+	Messages used:
+	  148  Schedule "X" running.                              (start, by timer)
+	  146  Schedule "X" run now by "user".                    (start, manual)
+	  689  Schedule "X" has started FileMaker script "Y".     (marks X as a script schedule; gives Y)
+	  150  Schedule "X" completed.                            (stop)
+	"""
+
+	start_re = re.compile (r'Schedule "(.*?)" (?:running\.|run now by )')
+	script_re = re.compile (r'Schedule "(.*?)" has started FileMaker script "(.*)"')
+	stop_re = re.compile (r'Schedule "(.*?)" completed\.')
+
+	if log_path is None:
+		log_path = get_log_path ('event')
+
+	try:
+		check_file_validity (log_path)
+	except FileCheckError as e:
+		print ('Error:', e)
+		return
+
+	pending = {}	# schedule name -> {'start': timestamp, 'script': script name or None}
+	rows = []		# (start timestamp, duration string, schedule name, script name)
+
+	def format_duration (td: datetime.timedelta) -> str:
+		hours, rem = divmod (td.total_seconds(), 3600)
+		minutes, secs = divmod (rem, 60)
+		return f'{int(hours)}:{int(minutes):02d}:{secs:06.3f}'
+
+	with open (log_path, 'r', encoding='utf-8', errors='replace') as logfile:
+		for line in logfile:
+			ts = parse_log_timestamp (line)
+			if ts is None:
+				continue
+
+			m = start_re.search (line)
+			if m:
+				pending[m.group(1)] = {'start': ts, 'script': None}
+				continue
+
+			m = script_re.search (line)
+			if m:
+				name, script = m.group(1), m.group(2)
+				# If the start message isn't in this log, use this message's time.
+				pending.setdefault (name, {'start': ts, 'script': None})['script'] = script
+				continue
+
+			m = stop_re.search (line)
+			if m:
+				run = pending.pop (m.group(1), None)
+				if run and run['script'] is not None:
+					rows.append ((run['start'], format_duration (ts - run['start']), m.group(1), run['script']))
+
+	# Script schedules that started but have no completion message (still running, or log ended).
+	for name, run in pending.items():
+		if run['script'] is not None:
+			rows.append ((run['start'], '(no stop)', name, run['script']))
+
+	name_width = max ([len ('SCHEDULE')] + [len (row[2]) for row in rows])
+
+	print (f'{"START":23}  {"DURATION":>14}  {"SCHEDULE":{name_width}}  SCRIPT')
+	for start_ts, duration_str, name, script in rows:
+		print (f'{start_ts:%Y-%m-%d %H:%M:%S.%f}'[:23] + f'  {duration_str:>14}  {name:{name_width}}  {script}')
+
+#
+# r e a d _ s y s t e m _ l o g
+#
 
 def read_system_log (line_count: int = 100):
 	"""
@@ -4662,6 +4744,10 @@ def handle_named_options (args) -> bool:
 
 	if args.set:
 		handle_set (args.set[0], args.set[1])
+		ignore_positionals = True
+
+	if args.scheduled_script_runs:
+		print_scheduled_script_runs()
 		ignore_positionals = True
 
 	if args.start_fms:
