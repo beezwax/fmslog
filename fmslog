@@ -2083,13 +2083,13 @@ class FileMakerODataAPI:
 # end FileMakerODataAPI
 
 #
-#	f i n d _ f i r s t _ t i m e s t a m p
+#	p a r s e _ l o g _ t i m e s t a m p
 #
 
 def parse_log_timestamp (line: str) -> Optional[datetime.datetime]:
 	"""Return a log message timestamp when the line uses a supported format."""
 	try:
-		if line[4] == '-' and line [24] == '-':
+		if line[4] == '-' and line [24] in '+-':
 			# Access, ClientStats, Event, Stats, etc.
 			return datetime.datetime.fromisoformat(line [:23])
 		elif line[4] == '-' and line[10] == 'T':
@@ -3749,7 +3749,7 @@ def print_scheduled_script_runs (log_path: str = None):
 
 	if log_path is None:
 		log_path = get_log_path ('event')
-
+	log_path = '/Library/FileMaker Server/Logs/EventWin.log'
 	try:
 		check_file_validity (log_path)
 	except FileCheckError as e:
@@ -4401,7 +4401,7 @@ def strip_line (log_name: str, line: str) -> str:
 	"""
 
 	if log_name in ['access','event']:
-		if line [24] == '-':
+		if line [24] in '+-':
 			items = line.split('\t')
 			#line = '{:23.23}  {:11}  {:4}  {:<}'.format (items[0], items[1], items[2], items[4])		# remove timezone and hostname
 			line = f'{items[0]:23.23}  {items[1]:11}  {items[2]:4}  {items[4]:<}'

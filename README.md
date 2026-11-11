@@ -83,6 +83,7 @@ options:
   --restart-fms             stop and start FileMaker Server service
   --start-fms               start the FileMaker Server service
   --stop-fms                stop the FileMaker Server service
+  --scheduled-script-runs   using the Event log, determine what schedules have run and their duration
   -s, --succinct            strip less useful details from log output (partially implemented)
   -t, --tail                wait for any new messages after printing current end of log
   --test-dapi               perform various operations using the Data API; requires the API_Testing file to be hosted on the server
@@ -257,12 +258,12 @@ Remove any output from the end of the line that would cause a line wrap for the 
 ### -u USER
 Used to specify the account/user name for FMS admin console or API testing file access.
 
-### -w --watch-path
+### -w, --watch-path PATH [PATH …]
 Check the given path(s) for changes every 10 seconds. If the path is a directory, changes more than two levels deep are summarized.
 
 ### -V, --version
-Print version of fmslog command and FileMaker Server components. May not handle all use cases,
-such as Java installed without using the FMS admin console.
+Print version of fmslog command and FileMaker Server components. May not handle all cases, such as
+Java installed without using the FMS admin console.
 
 ---
 
