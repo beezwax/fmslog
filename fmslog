@@ -3749,7 +3749,7 @@ def print_scheduled_script_runs (log_path: str = None):
 
 	if log_path is None:
 		log_path = get_log_path ('event')
-	log_path = '/Library/FileMaker Server/Logs/EventWin.log'
+	
 	try:
 		check_file_validity (log_path)
 	except FileCheckError as e:
