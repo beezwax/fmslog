@@ -928,7 +928,6 @@ def test_dapi_functions():
 			 sys.exit(3)
 		
 		try:
-			start_time = datetime.datetime.now()
 			# This also tests the ability to run a script.
 			print ('Deleting any pre-exising records...', flush=True, end='')
 			dapi.delete_all_records('DAPI')
@@ -965,7 +964,6 @@ def test_odata_functions():
 		odata = FileMakerODataAPI (username=USER, password=PASSWORD)
 
 		try:
-			start_time = datetime.datetime.now()
 			# This also tests the ability to run a script.
 			print ('Deleting any pre-exising records...', flush=True, end='')
 			odata.delete_all_records('OData')
@@ -1003,6 +1001,7 @@ def check_tcp_status (name: str, host: str, port: str, as_error=True) -> bool:
 		sock.settimeout(4)	# 4 seconds
 		result = sock.connect_ex((host,port))
 		if result == 0:
+			result_flag = True
 			print ('Responding')
 		else:
 			if as_error:
@@ -1013,6 +1012,8 @@ def check_tcp_status (name: str, host: str, port: str, as_error=True) -> bool:
 		print_error (f': Could not resolve host "{host}"')
 	finally:
 		sock.close()
+
+	return result_flag
 
 #
 #	c h e c k _ w e b d i r e c t _ s t a t u s
@@ -2486,7 +2487,7 @@ def get_db_directories() -> tuple:
 	secure_path = scan_file_last_match (event_log_path, secure_pathRE)
 	secure_path = convert_filemaker_path (secure_path)
 
-	# These paths are optional.
+	# These paths are optional and independent.
 	additional_path1 = scan_file_last_match (event_log_path, additional_path1RE)
 	if additional_path1:
 		additional_path1 = convert_filemaker_path (additional_path1)
@@ -2494,13 +2495,13 @@ def get_db_directories() -> tuple:
 		if remote_container_path1:
 			remote_container_path1 = convert_filemaker_path (remote_container_path1)
 
-		additional_path2 = scan_file_last_match (event_log_path, additional_path2RE)
-		if additional_path2:
-			additional_path2 = convert_filemaker_path (additional_path2)
-			remote_container_path2 = scan_file_last_match (event_log_path, remote_container_path2RE)
-			if remote_container_path2:
-				remote_container_path2 = convert_filemaker_path (remote_container_path2)
-			
+	additional_path2 = scan_file_last_match (event_log_path, additional_path2RE)
+	if additional_path2:
+		additional_path2 = convert_filemaker_path (additional_path2)
+		remote_container_path2 = scan_file_last_match (event_log_path, remote_container_path2RE)
+		if remote_container_path2:
+			remote_container_path2 = convert_filemaker_path (remote_container_path2)
+	
 	return (default_path, secure_path, additional_path1, additional_path2, remote_container_path1, remote_container_path2)
 
 #
@@ -3633,37 +3634,6 @@ def print_log_header (log_name:str, succinct: bool) -> int:
 	return line_count
 
 #
-#	p r i n t _ f i l e _ h e a d _ f a s t e r
-#
-
-def print_file_head_faster (file_path: str, lines: int) -> bool:
-	"""
-	Print up to the given number of lines of text from the start of the file at the provided path.
-	If MAX_READ_LEN is reached, stop output and append a '+'.
-	Result is False if there was an error opening or reading the file.
-	"""
-
-	MAX_READ_LEN = 4096
-	result = False
-
-	if lines > 0:
-		with open (file_path, 'r', encoding='utf-8') as logfile:
-			lines = logfile.readlines (MAX_READ_LEN)
-			for line in lines[0:SCREENROWS-1]:
-				print (line, end="")
-
-			result = True
-			if len (lines) == MAX_READ_LEN:
-				# indicate that we reached read limit
-				print ('+++')
-	else:
-		# We never opened the file, but will consider this a success.
-		result = True
-
-	#STDSCR.getch()
-	return result
-
-#
 #   p r i n t _ h e a d
 #
 
@@ -3815,7 +3785,7 @@ def read_system_log (line_count: int = 100):
 
 	try:
 		# Get today's date in the format used by the system log
-		today = datetime.datetime.now().strftime("%b %d")
+		#today = datetime.datetime.now().strftime("%b %d")
 		# Run the syslog command and filter for FMS messages
 		syslog_proc = subprocess.run(
 			['/usr/bin/log', 'show', '--info', '--last', '1h', '--predicate', 'processImagePath CONTAINS "fmserverd" or processImagePath CONTAINS "fmsgetpasskey"'],
@@ -4326,11 +4296,11 @@ def send_signal_to_process(pid: int, signal='USR1') ->bool:
 	"""
 		
 	try:
-		service_proc = subprocess.run(
-				['sudo', 'kill', '-' + signal, str (pid)],
-				capture_output=True,
-				text=True,
-				check=True)
+		subprocess.run(
+			['sudo', 'kill', '-' + signal, str (pid)],
+			capture_output=True,
+			text=True,
+			check=True)
 	except subprocess.CalledProcessError:
 		return False
 

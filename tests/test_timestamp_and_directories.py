@@ -203,7 +203,7 @@ class DirectoryReportingTests(unittest.TestCase):
 							self.assertIn(path, output.getvalue())
 						else:
 							warning.assert_any_call(
-								f'{label}: path unavailable in Event.log or Event-old.log')
+								f'{label}: path not found in Event.log or Event-old.log')
 					self.assertEqual(warning.call_count, int(default is None) + int(secure is None))
 					stats.assert_any_call('/additional', exclude_dirs=['RC_Data_FMS', 'Removed_by_FMS'])
 					for report in other_reports.values():
