@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- Mode:Python; indent-tabs-mode:nil; tab-width:3; encoding:utf-8 -*-
+# Python 3.9 or later required.
 
 """
 Filename: fmslog
@@ -925,7 +926,7 @@ def test_dapi_functions():
 	if USER and PASSWORD:
 		dapi = FileMakerDAPI (username=USER, password=PASSWORD)
 		if not dapi.authenticate():
-			 sys.exit(3)
+			sys.exit(3)
 		
 		try:
 			# This also tests the ability to run a script.
@@ -939,7 +940,7 @@ def test_dapi_functions():
 			rec_list = dapi.select_records('DAPI','TextData','a')
 			print ('done')
 			print ('Updating a set of records...', flush=True, end='')
-	
+
 			#	def update_test_records (self, table: str, id_list: list, field: str, source_pattern: str, dest_pattern: str) -> str:
 			dapi.update_test_records('DAPI', rec_list, 'TextData', 'a', 'B')
 			print ('done')
@@ -948,7 +949,7 @@ def test_dapi_functions():
 			sys.exit(3)
 		finally:
 			dapi.invalidate_token()
-			
+		
 	else:
 		print ('Error: must specify both user and password for DAPI test file')
 		sys.exit(3)
@@ -1425,7 +1426,7 @@ class FileMakerAdminAPI:
         
 		try:
 			# Make request with SSL context
-			response = urllib.request.urlopen(request, context=self.ssl_context)
+			response = urllib.request.urlopen(request, context=self.ssl_context, timeout=30)
 			response_data = response.read().decode('utf-8')
 			
 			if response_data:
@@ -1461,7 +1462,7 @@ class FileMakerAdminAPI:
 		request = urllib.request.Request(url, headers=headers, method='POST')
 
 		try:
-			response = urllib.request.urlopen(request, context=self.ssl_context, timeout=5)
+			response = urllib.request.urlopen(request, context=self.ssl_context, timeout=30)
 			data = json.loads(response.read().decode('utf-8'))
 
 			self.token = data['response']['token']
@@ -1695,7 +1696,7 @@ class FileMakerDAPI:
 		)
 
 		try:
-			response = urllib.request.urlopen(request, context=self.ssl_context)
+			response = urllib.request.urlopen(request, context=self.ssl_context, timeout=30)
 			response_data = response.read().decode('utf-8')
 
 			if response_data:
@@ -1711,7 +1712,7 @@ class FileMakerDAPI:
 			print(f"URL Error: {e.reason}")
 			raise
 
-	def authenticate(self) -> str | None:
+	def authenticate(self) -> str:
 		"""
 		Authenticate to the FileMaker Data API and obtain an access token.
 		Returns authentication token, or None on failure.
@@ -1891,7 +1892,7 @@ class FileMakerODataAPI:
 		self.ssl_context.check_hostname = False
 		self.ssl_context.verify_mode = ssl.CERT_NONE
 
-	def _make_ppp_request(self, endpoint, method='GET', data=None) -> dict | None:
+	def _make_ppp_request(self, endpoint, method='GET', data=None) -> dict:
 		"""
 		Make a Post, Patch, or Put request to FileMaker's OData interface.
 			endpoint: API endpoint path
@@ -1933,7 +1934,7 @@ class FileMakerODataAPI:
 
 		try:
 			# Make request with SSL context
-			response = urllib.request.urlopen(request, context=self.ssl_context)
+			response = urllib.request.urlopen(request, context=self.ssl_context, timeout=30)
 			response_data = response.read().decode('utf-8')
 
 		except urllib.error.HTTPError as e:
@@ -2122,10 +2123,10 @@ def parse_log_timestamp (line: str) -> Optional[datetime.datetime]:
 #	s c a n _ f i r s t _ t i m e s t a m p
 #
 
-def scan_first_timestamp (file_path: str, timestamp: datetime.datetime) -> Tuple[int, bool]:
+def scan_first_timestamp (file_path: str, timestamp: datetime.datetime) -> Tuple[int, bool, bool]:
 	"""
 	Return the first line at or after the timestamp, or the last earlier timestamped line.
-	Also return whether any supported timestamp exists.
+	Also return whether any supported timestamp exists and whether a matching timestamp was found.
 	"""
 	has_timestamps = False
 	last_before_timestamp_line = -1
@@ -2136,10 +2137,10 @@ def scan_first_timestamp (file_path: str, timestamp: datetime.datetime) -> Tuple
 				continue
 			has_timestamps = True
 			if line_ts >= timestamp:
-				return line_num, has_timestamps
+				return line_num, has_timestamps, True
 			last_before_timestamp_line = line_num
 
-	return last_before_timestamp_line, has_timestamps
+	return last_before_timestamp_line, has_timestamps, False
 
 #
 #	f i n d _ f i r s t _ t i m e s t a m p
@@ -2166,8 +2167,8 @@ def write_log_to_zip (zipf: zipfile.ZipFile, file_path: str, archive_name: str,
 		zipf.write(file_path, arcname=archive_name)
 		return
 
-	start_line, has_timestamps = scan_first_timestamp(file_path, timestamp)
-	if not has_timestamps or start_line < 0:
+	start_line, has_timestamps, has_matching_timestamp = scan_first_timestamp(file_path, timestamp)
+	if not has_timestamps or start_line < 0 or not has_matching_timestamp:
 		zipf.write(file_path, arcname=archive_name)
 		return
 
@@ -2713,6 +2714,18 @@ def init_curses():
 	STDSCR.scrollok(1)
 
 #
+#	n o r m a l i z e _ t a i l _ a r g s
+#
+
+def normalize_tail_args(args):
+	"""Route the documented --tail=SECONDS form to its internal parser option."""
+	return [
+		'--tail-interval=' + arg.partition('=')[2]
+		if arg.startswith('--tail=') else arg
+		for arg in args
+	]
+
+#
 #	i n i t _ p a r s e r
 #
 
@@ -2752,8 +2765,8 @@ def init_parser() -> argparse.ArgumentParser:
 	parser.add_argument('--scheduled-script-runs', action='store_true', help='list script schedule runs')
 	parser.add_argument('--start-fms', action='store_true', help='start the FileMaker Server service')
 	parser.add_argument('--stop-fms', action='store_true', help='stop the FileMaker Server service')
-	parser.add_argument('-t', '--tail', dest='tail', action='store_true', help='wait for any new messages')
-	#parser.add_argument('--tail', type=float, nargs='?', const=1.0, default=[-1.0], help='wait for any new messages, optionally specifying number of seconds to wait for each file')
+	parser.add_argument('-t', '--tail', dest='tail', action='store_true', help='wait for new messages; use --tail=SECONDS to set the interval')
+	parser.add_argument('--tail-interval', dest='tail_interval', type=float, metavar='SECONDS', default=None, help=argparse.SUPPRESS)
 	parser.add_argument('--test-dapi', action='store_true', help='extended Data API (DAPI) checks; requires API_Testing file')
 	parser.add_argument('--test-odata', action='store_true', help='extended OData API checks; requires API_Testing file')
 	parser.add_argument('--truncate', action='store_true', help='cut off any output if beyond width of screen')
@@ -2969,7 +2982,7 @@ def manage_fms_service (action: str) -> bool:
 #	p a r s e _ b e g i n _ t i m e
 #
 
-def parse_begin_time (time_str: str) -> datetime.datetime | None:
+def parse_begin_time (time_str: str) -> datetime.datetime:
 	"""
 	Convert the various possible time values into a timestamp value. Some
 	possible values could be '30s' for 30 seconds ago, or '14:00:10'
@@ -4758,7 +4771,11 @@ def main():
 	global LAST_LOG_PRINTED, OUTPUT_MODE, SHOW_HEADERS, SUCCINCT_MODE, TRUNCATE_MODE
 	
 	parser = init_parser()
-	args = parser.parse_args()
+	args = parser.parse_args(normalize_tail_args(sys.argv[1:]))
+	if args.tail_interval is not None and (
+		not math.isfinite(args.tail_interval) or args.tail_interval <= 0
+	):
+		parser.error('--tail interval must be a positive finite number')
 	screen_lines_counter = 0					# if used, will start (num lines on screen * num screens) - space for prompt line
 
 	while True:
@@ -4830,17 +4847,14 @@ def main():
 		
 		# TAILING/FOLLOWING LOGS
 
-		if (isinstance (args.tail, bool) and args.tail) or (isinstance (args.tail,list) and args.tail[0] > 0):
+		if args.tail or args.tail_interval is not None:
 			# Show existing context for each log.
 			for log_name in args.logs:
 				print_tail (log_name, 15, SHOW_HEADERS, SUCCINCT_MODE)
 				LAST_LOG_PRINTED = log_name # So TailPrint knows where we left off.
 
 			tailer = TailPrint (args.logs)
-			if isinstance (args.tail, list):
-				tailer.follow(args.tail[0])
-			else:
-				tailer.follow(1.0)
+			tailer.follow(args.tail_interval if args.tail_interval is not None else 1.0)
 		
 			break
 		

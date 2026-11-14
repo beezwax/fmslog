@@ -61,7 +61,7 @@ class CaptureTests(unittest.TestCase):
 			content,
 		)
 
-	def test_begin_captures_from_last_timestamp_before_threshold(self):
+	def test_begin_captures_full_log_when_no_timestamp_meets_threshold(self):
 		content = (
 			b'log preamble\n'
 			b'2025-10-27 04:12:24.101 -0700\tfirst old message\n'
@@ -69,7 +69,7 @@ class CaptureTests(unittest.TestCase):
 		)
 		self.assertEqual(
 			self.capture(content, datetime.datetime(2025, 10, 27, 5)),
-			content[content.index(b'2025-10-27 04:13'):],
+			content,
 		)
 
 	def test_capture_without_begin_preserves_entire_file(self):

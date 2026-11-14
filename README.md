@@ -28,7 +28,6 @@ Current functionality with major issues:
 - `-m` or `--merge`: not implemented
 - `-s` or `--succinct`: partially implemented
 - `--ssh`: not implemented
-- `--tail=n`: numeric parameter ignored
 - `-t` or `--tail`: may not print current log segment before starting to follow/tail
 - nginx/apache/IIS: log parsing not fully implemented
 
