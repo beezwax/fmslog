@@ -120,6 +120,13 @@ fmslog --begin 2025-11-04 event
 
 Normally, one screen full of output starting at earliest message is output. Use the -n option to change this.
 
+On macOS, `fmslog -b 10h syslog` queries the unified system log directly using
+the calculated start time. On Ubuntu, it uses `journalctl` for the
+`fmshelper.service` unit, including its child processes. Reading the system
+journal may require running with `sudo` or membership in the `adm` or
+`systemd-journal` group. Without `-b`, `syslog` shows the last hour.
+System log output is not currently limited by `-n`.
+
 Some logs may not have any timestamps, or may use them inconsistently. This may result in output going off the last time stamp found, or including the entire file.
 
 ### -B, --backups

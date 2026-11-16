@@ -1,6 +1,7 @@
 import ast
 import builtins
 from contextlib import redirect_stdout
+import datetime
 import io
 from pathlib import Path
 import runpy
@@ -14,7 +15,7 @@ TREE = ast.parse(SOURCE.read_text(encoding='utf-8'))
 FUNCTIONS = [
 	node for node in TREE.body
 	if isinstance(node, ast.FunctionDef)
-	and node.name in ('strip_line', 'print_crash_reports')
+	and node.name in ('strip_line', 'print_crash_reports', 'print_system_log')
 ]
 NAMESPACE = {}
 exec(compile(ast.Module(body=FUNCTIONS, type_ignores=[]), str(SOURCE), 'exec'), NAMESPACE)
@@ -85,6 +86,98 @@ class PlatformImportTests(unittest.TestCase):
 					NAMESPACE['print_crash_reports']()
 				pwd.getpwnam.assert_called_once_with('fmserver')
 				self.assertIn('fmserver user not found', output.getvalue())
+
+
+class SystemLogTests(unittest.TestCase):
+	def test_macos_uses_formatted_start_when_set(self):
+		start = datetime.datetime(2025, 11, 4, 14, 5, 6, 123456)
+		run = Mock(return_value=SimpleNamespace(stdout='message\n', stderr='', returncode=0))
+		with (
+			patch.dict(NAMESPACE, TIMESTAMP_START=start,
+				platform=SimpleNamespace(system=lambda: 'Darwin'),
+				subprocess=SimpleNamespace(run=run)),
+			redirect_stdout(io.StringIO()),
+		):
+			self.assertEqual(NAMESPACE['print_system_log'](), 1)
+		command = run.call_args.args[0]
+		self.assertEqual(command[command.index('--start') + 1], '2025-11-04 14:05:06')
+
+	def test_macos_omits_start_when_unset(self):
+		run = Mock(return_value=SimpleNamespace(stdout='message\n', stderr='', returncode=0))
+		with (
+			patch.dict(NAMESPACE, TIMESTAMP_START=None,
+				platform=SimpleNamespace(system=lambda: 'Darwin'),
+				subprocess=SimpleNamespace(run=run)),
+			redirect_stdout(io.StringIO()),
+		):
+			NAMESPACE['print_system_log']()
+		self.assertNotIn('--start', run.call_args.args[0])
+		command = run.call_args.args[0]
+		self.assertEqual(command[command.index('--last') + 1], '1h')
+
+	def test_cli_routes_syslog_with_and_without_begin_to_log_command(self):
+		for system, options in (
+			('Darwin', []), ('Darwin', ['-b', '10h']),
+			('Linux', []), ('Linux', ['-b', '10h']),
+		):
+			with self.subTest(system=system, options=options):
+				executable = '/usr/bin/log' if system == 'Darwin' else '/usr/bin/journalctl'
+
+				def run(command, **kwargs):
+					if command[0] == executable:
+						return SimpleNamespace(stdout='FileMaker test message\n', stderr='', returncode=0)
+					return SimpleNamespace(stdout='package-id: test\nversion: 21.0\n', stderr='', returncode=0)
+
+				before = datetime.datetime.now() - datetime.timedelta(hours=10)
+				with (
+					patch('platform.system', return_value=system),
+					patch('subprocess.run', side_effect=run) as subprocess_run,
+					patch('sys.argv', [str(SOURCE), *options, 'syslog']),
+					redirect_stdout(io.StringIO()) as output,
+				):
+					runpy.run_path(str(SOURCE), run_name='__main__')
+				after = datetime.datetime.now() - datetime.timedelta(hours=10)
+				log_commands = [
+					call.args[0] for call in subprocess_run.call_args_list
+					if call.args[0][0] == executable
+				]
+				self.assertEqual(len(log_commands), 1)
+				command = log_commands[0]
+				self.assertIn('FileMaker test message', output.getvalue())
+				if system == 'Linux':
+					self.assertIn('--no-pager', command)
+					self.assertEqual(command[command.index('--unit') + 1], 'fmshelper.service')
+				if options:
+					start_option = '--start' if system == 'Darwin' else '--since'
+					start = datetime.datetime.strptime(command[command.index(start_option) + 1], '%Y-%m-%d %H:%M:%S')
+					self.assertGreaterEqual(start, before.replace(microsecond=0))
+					self.assertLessEqual(start, after)
+					self.assertNotIn('--last', command)
+				elif system == 'Linux':
+					self.assertEqual(command[command.index('--since') + 1], '1 hour ago')
+
+	def test_macos_log_failure_reports_stderr_and_returns_error(self):
+		run = Mock(return_value=SimpleNamespace(stdout='', stderr='permission denied\n', returncode=1))
+		print_error = Mock()
+		with patch.dict(NAMESPACE, TIMESTAMP_START=None,
+			platform=SimpleNamespace(system=lambda: 'Darwin'),
+			subprocess=SimpleNamespace(run=run), print_error=print_error):
+			self.assertLess(NAMESPACE['print_system_log'](), 0)
+		print_error.assert_called_once()
+		self.assertIn('permission denied', print_error.call_args.args[0])
+
+	def test_ubuntu_reports_journal_access_warning(self):
+		run = Mock(return_value=SimpleNamespace(
+			stdout='message\n', stderr='Not seeing messages from other users and the system.\n', returncode=0))
+		print_warning = Mock()
+		with (
+			patch.dict(NAMESPACE, TIMESTAMP_START=None,
+				platform=SimpleNamespace(system=lambda: 'Linux'),
+				subprocess=SimpleNamespace(run=run), print_warning=print_warning),
+			redirect_stdout(io.StringIO()),
+		):
+			self.assertEqual(NAMESPACE['print_system_log'](), 1)
+		print_warning.assert_called_once_with('Not seeing messages from other users and the system.')
 
 
 if __name__ == '__main__':

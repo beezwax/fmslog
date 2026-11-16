@@ -8,7 +8,7 @@ Author: Simon Brown on 10/15/2025
 Purpose: Display FileMaker Server logs, change logging options, and get resource usage.
 """
 
-VERSION = "0.65 - 2026-11-10"
+VERSION = "0.66 - 2026-11-15"
 
 # Only using standard library modules.
 
@@ -486,6 +486,12 @@ LOG_SPECS_DARWIN = {
 }
 
 LOG_SPECS_LINUX = {
+	'syslog': {
+		'path': '!/usr/bin/journalctl',
+		'lghd': True,
+		'head': 'syslog',
+		'tbst': 8
+	},
 	'fmshelper': {
 		'path': 'Logs/fmshelper.log',
 		'lghd': True,
@@ -671,13 +677,15 @@ def calc_row_metrics (num_logs, log_lines_count_val) -> tuple:
 		screens_num_str = log_lines_count_val.replace('s','')
 		num_mode = 's'
 
-		screens_num = 1		# default value if only 's' is provided
-		
-		try:
-			screens_num = int (screens_num_str)
-		except ValueError:
-			print ("Error: invalid number for number parameter")
-			return (-1,-1,-1)
+		if log_lines_count_val == 's':
+			# If only 's' is provided, default to 1 screen.
+			screens_num = 1
+		else:
+			try:
+				screens_num = int (screens_num_str)
+			except ValueError:
+				print ("Error: invalid number for number parameter")
+				return (-1,-1,-1)
 			
 		screen_lines_count = max ([SCREENROWS * screens_num - 1, 6])
 
@@ -2536,14 +2544,6 @@ def get_local_ip() -> str:
 	return None
 
 #
-#	g e t _ f i l e _ t i m e s t a m p s
-#
-
-def get_file_timestamps (path: str) -> tuple:
-	"""Return a file's creation and modification timestamps"""
-	return (os.path.getmtime(path), pathlib.Path(path).stat().st_mtime)
-
-#
 #	g e t _ f m s e r v e r d _ p i d
 #
 
@@ -3059,7 +3059,7 @@ def pick_from_list (options: list, prompt: str) -> int:
 	user_input = ''
 
 	try:
-		selection = input (input_prompt)
+		user_input = input (input_prompt)
 
 		while user_input not in map (str, range(1, len(options) + 1)):
 			user_input = input (input_prompt)
@@ -3519,6 +3519,9 @@ def print_log (log_name: str, count: int):
 	Top-level function to call the appropriate log printing function.
 	"""
 
+	if log_name == 'syslog':
+		return print_system_log(count)
+
 	lines_printed = -1
 	#print (OUTPUT_MODE)
 
@@ -3783,32 +3786,48 @@ def print_scheduled_script_runs (log_path: str = None):
 		print (f'{start_ts:%Y-%m-%d %H:%M:%S.%f}'[:23] + f'  {duration_str:>14}  {name:{name_width}}  {script}')
 
 #
-# r e a d _ s y s t e m _ l o g
+# p r i n t _ s y s t e m _ l o g
 #
 
-def read_system_log (line_count: int = 100):
+def print_system_log (line_count: int = 100) -> int:
 	"""
 	Print the macOS or Ubuntu system log, filtered for FMS messages.
 	"""
 	#TODO: implement line count limit
 
-	if platform.system() != 'Darwin':
-		print("This function is only supported on macOS.")
-		return
+	system = platform.system()
+	if system not in ('Darwin', 'Linux'):
+		print_error("This function is only supported on macOS and Ubuntu.")
+		return -1
 
 	try:
-		# Get today's date in the format used by the system log
-		#today = datetime.datetime.now().strftime("%b %d")
-		# Run the syslog command and filter for FMS messages
+		if system == 'Darwin':
+			command = ['/usr/bin/log', 'show', '--info', '--predicate', 'processImagePath CONTAINS "fmserverd" or processImagePath CONTAINS "fmsgetpasskey"']
+			if TIMESTAMP_START is None:
+				command.extend(['--last', '1h'])
+			else:
+				command.extend(['--start', TIMESTAMP_START.strftime('%Y-%m-%d %H:%M:%S')])
+		else:
+			command = ['/usr/bin/journalctl', '--no-pager', '--unit', 'fmshelper.service', '--since']
+			command.append(TIMESTAMP_START.strftime('%Y-%m-%d %H:%M:%S') if TIMESTAMP_START is not None else '1 hour ago')
 		syslog_proc = subprocess.run(
-			['/usr/bin/log', 'show', '--info', '--last', '1h', '--predicate', 'processImagePath CONTAINS "fmserverd" or processImagePath CONTAINS "fmsgetpasskey"'],
+			command,
 			capture_output=True,
 			text=True,
 			check=False)
-		print(syslog_proc.stdout)
-	except Exception as e:
+		if syslog_proc.returncode != 0:
+			error = syslog_proc.stderr.strip() or f'{command[0]} exited with status {syslog_proc.returncode}'
+			print_error(f"Error: while retrieving system log: {error}")
+			return -2
+		if syslog_proc.stderr.strip():
+			print_warning(syslog_proc.stderr.strip())
+		print(syslog_proc.stdout, end='')
+		line_count = len(syslog_proc.stdout.splitlines())
+	except OSError as e:
 		print_error (f"Error: while retrieving system log: {e}")
+		return -2
 
+	return line_count
 
 #
 #	p r i n t _ n e t _ s t a t u s
@@ -3926,7 +3945,7 @@ def print_tail (log_name: str, count: int, header: bool, succinct: bool) -> int:
 
 	if log_name == 'syslog':
 		# On macOS, the system log is not a regular text file, so we need to read it differently.
-		line_list = read_system_log (line_count)
+		line_count = print_system_log (line_count)
 
 	else:
 		if TIMESTAMP_START:
