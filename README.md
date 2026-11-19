@@ -55,7 +55,7 @@ usage: fmslog [-b BEGIN] [-e EDIT] [-f FILTER] [-h] [-H] [-i] [-l] [-L] [-m] [-n
 View FileMaker Server logs and set logging options
 
 positional arguments (log name):
-  {access,admin,adminapi,catalina,clientstats,dapi,event,fac,fmodatadebug,fmsadmindebug,fmsasedebug,fmscwpc,fmscwpcli,fmsdebug,fmsgetpasskeyebug,fmshdebug,fmshelper,fmslogdebug,fmwipd,httpaccess,httpdctlerr,httpdctlout,httperror,httpsslaccess,httpsslerror,install,httpaccess,loadschedules,odata,odatadebug,scriptevent,stats,stderr,stdout,topcall,trimlog,wpe,wpedebug,xdbc}
+  {access,admin,catalina,clientstats,dapi,event,fac,fmodatadebug,fmsadmindebug,fmsasedebug,fmscwpc,fmscwpcli,fmsdebug,fmsgetpasskeyebug,fmshdebug,fmshelper,fmslogdebug,fmwipd,httpaccess,httpdctlerr,httpdctlout,httperror,httpsslaccess,httpsslerror,install,httpaccess,loadschedules,odata,odatadebug,scriptevent,stats,stderr,stdout,topcall,trimlog,wpe,wpedebug,xdbc}
 
 options:
   -B, --backups             list scheduled backup sets present, including total number of files and size
@@ -227,13 +227,18 @@ For ClientStats and TopCallStats, succinct output removes the timezone while
 preserving the remaining fields. For Data API logs, it also removes the host
 address, preserving the code, level, user, HTTP method, message, and size.
 
-### -S, --set VERB NOUN
-Change FMS configuration options. It takes two parameters, a noun and a verb. Currently, verbs are `enable` or `disable`.
-The supported nouns are:
-- `debuglogging`: detailed FMS logs such as fmsDebug.log; This could significantly slow down some server operations and quickly creates large log files
-- `clientstats`: user specific statistics for each log interval
-- `serverstats`: database engine statistics
-- `topcallstats`: statistics for top 25 calls
+### -S, --set NOUN VALUES
+Change FMS configuration options. It takes two parameters, a noun and a value.
+
+Supported NOUNS are:
+- `debuglogging`: detailed FMS logs such as fmsDebug.log; This will slow down some server operations and quickly creates large log files
+- `clientstats`:   user specific statistics for each log interval
+- `serverstats`:   database engine statistics
+- `statsinterval`: integer logging interval in seconds for many logs
+- `topcallstats`:  statistics for top 25 calls
+
+For toggle options, `enable`, `true`, and `1` enable the option; `disable`,
+`false`, and `0` disable it.
 
 ### -t, --tail
 Print messages as they are added to log files until user cancels with Ctrl-C.

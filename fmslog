@@ -8,7 +8,7 @@ Author: Simon Brown on 10/15/2025
 Purpose: Display FileMaker Server logs, change logging options, and get resource usage.
 """
 
-VERSION = "0.66 - 2026-11-15"
+VERSION = "0.67 - 2026-11-17"
 
 # Only using standard library modules.
 
@@ -177,7 +177,6 @@ DBS_CONFIG_PATH = BASE_PATH + '/Data/Preferences/dbs_config.xml'
 LOG_ALIAS = {
 	('acc', 'access'),
 	('adm', 'admin'),
-	('ada', 'adminapi'),
 	('cat', 'catalina'),
 	('cli', 'clientstats'),
 	('dap', 'dapi'),
@@ -201,7 +200,7 @@ LOG_ALIAS = {
 LOG_SPECS_BASE = {
 	'access': {
 		'path': 'Logs/Access.log',
-		'lghd': True,
+		'lghd': False,
 		#        ----------1---------2---------3---------4---------5---------6---------7---------8---------9---------0---------
 		#        2025-09-15 01:12:45.831 -0700  Information  228   some-dev.filemaker.beezwax.net         The previous log file reached maximum size, and was renamed to "Access-old.log".
 		'head': 'Access.log\n' + \
@@ -213,7 +212,7 @@ LOG_SPECS_BASE = {
 	},
 	'admin': {
 		'path': 'Admin/FAC/logs/fac.log',
-		'lghd': True,
+		'lghd': False,
 		#        ----------1---------2---------3---------4---------5---------6---------7---------8---------9---------0---------
 		#			2022-05-17 14:29:56 -0700  Execute /opt/FileMaker/FileMaker Server/Admin/FAC/facstart.sh
 		#			2022-05-17 14:30:00 -0700 - error:  fmi   127.0.0.1   notifications  general   n/a   "New system notification generated, type: CPU_USAGE_EXCEED_HARD_LIMIT"
@@ -224,20 +223,7 @@ LOG_SPECS_BASE = {
 		'shed': 'TIMESTAMP           {LEVEL}   {END} {ADDRESS}   {COMPONENT}    {TYPE}    {CODE}  MESSAGE',
 		'shtb': [23]
 	},
-	'adminapi': {
-		'path': 'Admin/FAC/logs/fac1.log',
-		'lghd': True,
-		#        ----------1---------2---------3---------4---------5---------6---------7---------8---------9---------0---------
-		#			2022-05-24 14:04:30 -0700 - error:   fmi   127.0.0.1   fmsadminapi   general   3   "Get worker list failed."
-		#			2022-05-24 19:32:51 -0700       Execute /opt/FileMaker/FileMaker Server/Admin/FAC/facstart.sh
-		# Only uses tab after timestamp with regular messages (eg, not error or warn)
-		'head': 'fac1.log\n' + \
-				'TIMESTAMP                   LEVEL  ENDP  ADDRESS     COMPONENT      TYPE      CODE  MESSAGE',
-		'tbst': [35,41,53,68,78,84],
-		'shed': 'TIMESTAMP           {LEVEL}   {END} {ADDRESS}   {COMPONENT}    {TYPE}    {CODE}  MESSAGE',
-		'shtb': [23]
-	},
-
+	
 	'catalina': {
 		'path': 'Web Publishing/publishing-engine/jwpc-tomcat/logs/catalina.*',
 		'lghd': False,
@@ -335,7 +321,7 @@ LOG_SPECS_BASE = {
 	'fmshdebug': {
 		'path': 'Database Server/bin/fmshDebug.log',
 		'lghd': True,
-			#		2024-10-21 09:55:47.101 -0700 [HelperApp] Debug::DumpBitSettings() feature(s) enabled: [ AlwaysPrint | Assert | ForceOutput | Backup | UploadDownload | Server | ServerCommands | ServerComponents | ServerDependencies | FMSECLI | NotificationsStackCrawls | Anchors | BPlusTree | FileBox | LicenseServer | CalcEngine | Add-ons | OData | TransactSupport | AdminAPI | CertVerify | CurrentThread | Consolidator | DownloadService | WIP | EditOtherClientLayout | CLI | ThreadedSorting | DisableServerSideSorting | DisableMemoryKeyCmpIndexing | PurgeTempDB | DisableSharingLockOnServer | PersistentData | DisableServerSideSummary | SupportNestedPSOS ]
+			#		2024-10-21 09:55:47.101 -0700 [HelperApp] Debug::DumpBitSettings() feature(s) enabled: [ AlwaysPrint | Assert | ForceOutput | Backup | UploadDownload | Server | ServerCommands | ServerComponents | ServerDependencies | FMSECLI | NotificationsStackCrawls | Anchors | BPlusTree | FileBox | LicenseServer | CalcEngine | Add-ons | OData | TransactSupport | CertVerify | CurrentThread | Consolidator | DownloadService | WIP | EditOtherClientLayout | CLI | ThreadedSorting | DisableServerSideSorting | DisableMemoryKeyCmpIndexing | PurgeTempDB | DisableSharingLockOnServer | PersistentData | DisableServerSideSummary | SupportNestedPSOS ]
 			#		2024-10-21 09:55:47.117 -0700 [HelperApp] AdminMgrConfigFile() installation directory = /opt/FileMaker/FileMaker Server/, config file = Admin/conf/deployment.xml, encrypted = false
 		'head': 'fmshDebug.log',
 		'tbst': 8	# replace any tabs with two spaces
@@ -1307,11 +1293,6 @@ def expand_tabs_for_line (log_name: str, line: str) -> str:
 		if TRUNCATE_MODE and len(line) > SCREENCOLS:
 			return line[:SCREENCOLS-1] + "…\n"
 		return line
-
-	if log_name in ['admin','adminapi']:
-		# This log doesn't use tabs, but instead uses 2 or 3 spaces to separate columns.
-		respace = re.compile (r'  +')
-		line = respace.sub ('\t', line)
 	
 	if log_name in ['httpaccess','httpsslaccess']:
 		#                 host   iden user  time    zone  requ  stat  size
@@ -2224,6 +2205,27 @@ def fmsadmin_toggle_log (fm_logname: str, enable_flag: bool, user: str, password
 	return fmsadmin_proc.returncode == 0
 
 #
+#	f m s a d m i n _ s e t _ s t a t s _ i n t e r v a l
+#
+
+def fmsadmin_set_stats_interval (stats_interval: int, user: str, password: str) -> bool:
+	"""
+	Set the statistics log interval using the fmsadmin command.
+	Returns true if the operation succeeded.
+	"""
+
+	fmsadmin_proc = subprocess.run(
+		['fmsadmin', 'set', 'serverconfig', f'statsinterval={stats_interval}', '-u', user, '-p', password],
+		capture_output=True,
+		text=True,
+		check=False)
+
+	print (fmsadmin_proc.stdout)
+	if fmsadmin_proc.returncode != 0 and fmsadmin_proc.stderr:
+		print (fmsadmin_proc.stderr, file=sys.stderr)
+	return fmsadmin_proc.returncode == 0
+
+#
 #	f o l l o w _ f i l e
 #
 
@@ -2659,16 +2661,33 @@ def get_vaadin_version() -> str:
 #	h a n d l e _ s e t
 #
 
-def handle_set (verb: str, noun: str):
+def handle_set (value: str | int, noun: str):
 	"""
 	Execute the config changes specified in parameters.
 	"""
 
-	valid_options = False	# may still fail for other reasons
+	if noun == 'statsinterval':
+		try:
+			stats_interval = int (value)
+		except (TypeError, ValueError):
+			print ('Error: statsinterval value must be an integer.')
+			return
+		if USER is None or PASSWORD is None:
+			print ('Error: FMS console user and password are required to set this option.')
+			return
+		fmsadmin_set_stats_interval (stats_interval, USER, PASSWORD)
+		return
 
-	if verb not in ['enable','disable']:
-		print ('Error: unrecognized parameter for set:', verb)
-		print ('Use "enable" or "disable" instead.')
+	valid_options = False	# may still fail for other reasons
+	normalized_value = str (value).lower ()
+
+	if normalized_value in ('enable', 'true', '1'):
+		enabled = True
+	elif normalized_value in ('disable', 'false', '0'):
+		enabled = False
+	else:
+		print ('Error: unrecognized parameter for set:', value)
+		print ('Use "enable", "true", or 1 to enable; "disable", "false", or 0 to disable.')
 		return
 
 	if noun == 'debuglogging':
@@ -2676,9 +2695,9 @@ def handle_set (verb: str, noun: str):
 			claris_config_dir = BASE_PATH + '/Database Server/bin'
 		else:
 			claris_config_dir = BASE_PATH + '/Database Server'
-		if verb == 'enable':
+		if enabled:
 			claris_config_write (claris_config_dir)
-		elif verb == 'disable':
+		else:
 			claris_config_remove (claris_config_dir)
 		valid_options = True
 
@@ -2690,17 +2709,17 @@ def handle_set (verb: str, noun: str):
 			return
 
 		if noun == 'clientstats':
-			fmsadmin_toggle_log ('clientstats', verb == 'enable', USER, PASSWORD)
+			fmsadmin_toggle_log ('clientstats', enabled, USER, PASSWORD)
 			valid_options = True
 		elif noun == 'serverstats':
-			fmsadmin_toggle_log ('serverstats', verb == 'enable', USER, PASSWORD)
+			fmsadmin_toggle_log ('serverstats', enabled, USER, PASSWORD)
 			valid_options = True
 		elif noun == 'topcallstats':
-			fmsadmin_toggle_log ('topcallstats', verb == 'enable', USER, PASSWORD)
+			fmsadmin_toggle_log ('topcallstats', enabled, USER, PASSWORD)
 			valid_options = True
 
 	if not valid_options:
-		print ('Error: unrecognized parameter(s) for set:', verb, noun)
+		print ('Error: unrecognized parameter(s) for set:', value, noun)
 
 #
 #	i n i t _ c u r s e s
