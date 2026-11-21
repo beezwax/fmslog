@@ -18,7 +18,7 @@ FUNCTIONS = [
 	if isinstance(node, ast.FunctionDef)
 	and node.name in (
 		'parse_log_timestamp', 'scan_first_timestamp',
-		'find_first_timestamp', 'read_tail_time', 'print_data_dirs_info',
+		'find_closest_to_timestamp', 'read_tail_time', 'print_data_dirs_info',
 		'print_documents_info', 'print_documents_web_info',
 	)
 ]
@@ -35,7 +35,7 @@ class TimestampScanningTests(unittest.TestCase):
 			path = Path(directory) / 'sample.log'
 			path.write_text(lines, encoding='utf-8')
 			try:
-				return NAMESPACE['find_first_timestamp'](str(path), threshold)
+				return NAMESPACE['find_closest_to_timestamp'](str(path), threshold)
 			finally:
 				linecache.clearcache()
 

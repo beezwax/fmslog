@@ -8,7 +8,7 @@ Author: Simon Brown on 10/15/2025
 Purpose: Display FileMaker Server logs, change logging options, and get resource usage.
 """
 
-VERSION = "0.67 - 2026-11-17"
+VERSION = "0.68 - 2026-11-21"
 
 # Only using standard library modules.
 
@@ -2135,11 +2135,12 @@ def scan_first_timestamp (file_path: str, timestamp: datetime.datetime) -> Tuple
 #	f i n d _ f i r s t _ t i m e s t a m p
 #
 
-def find_first_timestamp (file_path: str, timestamp: datetime.datetime) -> int:
+def find_closest_to_timestamp (file_path: str, timestamp: datetime.datetime) -> int:
 	"""
-	Scan file until the first log timestamp equal or greater than the search
-	timestamp is found, returning the line number (base 1) of matching line.
-	Note that a few logs don't emit timestamps consistently. 
+	Scan file for the first, closest message to the given timestamp,
+	returning the line number (base 1) of matching line.
+	Note that a few logs don't emit timestamps consistently,
+	so a message emitted before the given time may be used as result.
 	If a match is never found -1 is returned.
 	"""
 
@@ -2661,9 +2662,11 @@ def get_vaadin_version() -> str:
 #	h a n d l e _ s e t
 #
 
-def handle_set (value: str | int, noun: str):
+def handle_set (noun: str, value: str):
 	"""
 	Execute the config changes specified in parameters.
+	noun: will be the value being set
+	value: will be either be a flag or an integer value as a string
 	"""
 
 	if noun == 'statsinterval':
@@ -2758,6 +2761,7 @@ def init_parser() -> argparse.ArgumentParser:
 		description='View FileMaker Server logs and set logging options.')
 
 	parser.add_argument('-B', '--backups', action='store_true', help='list paths & sizes of backup sets')
+	parser.add_argument('--backup-runs', action='store_true', help='list backup runs from the Event log')
 	parser.add_argument('-b', '--begin', nargs=1, help='start at first message on or after time or time interval')
 	parser.add_argument('--capture', nargs=1, metavar='ZIPFILE', help='save named logs to a zip archive; use -b to start at a timestamp')
 	parser.add_argument('-C', '--check-connectivity', dest='check_connectivity', nargs='?', const='', metavar='HOST', help='check connectivity of API endpoints, optionally using HOST for external tests')
@@ -3390,6 +3394,112 @@ def print_warning (msg: str):
 	"""
 	print (warning_string (msg))
 
+
+#
+#	p r i n t _ b a c k u p _ r u n s
+#
+
+def print_backup_runs (log_path: str = None):
+	"""Report backup starts and observed clone and consistency-check results."""
+	if log_path is None:
+		log_path = get_log_path ('event')
+
+	try:
+		check_file_validity (log_path)
+	except FileCheckError as e:
+		print ('Error:', e)
+		return
+
+	start_re = re.compile (r'Schedule "(.*?)" (?:running\.|run now by )')
+	stop_re = re.compile (r'Schedule "(.*?)" completed\.')
+	backup_re = re.compile (r'Starting to back up (\d+) database\(s\) to folder "(.*?)"')
+	file_re = re.compile (r'Backup of "(.*?)" (?:completed|skipped)\b')
+	result_re = re.compile (r'(Clone|Consistency check) (succeeded|failed) on backup of database "(.*?)"')
+
+	pending = {}
+	runs = []
+	active = []
+	with open (log_path, 'r', encoding='utf-8', errors='replace') as logfile:
+		for line in logfile:
+			ts = parse_log_timestamp (line)
+			fields = line.rstrip('\r\n').split ('\t', 4)
+			if ts is None or len(fields) != 5:
+				continue
+			code, message = fields[2], fields[4]
+
+			if code in ('146', '148'):
+				m = start_re.search (message)
+				if m:
+					pending[m.group(1)] = ts
+			elif code == '774':
+				m = backup_re.search (message)
+				if not m:
+					continue
+				count, folder = int(m.group(1)), m.group(2)
+				folder_name = folder.rstrip('/\\').replace('\\', '/').rsplit('/', 1)[-1]
+				matching = [
+					name for name in pending
+					if re.fullmatch (re.escape(name) + r'_\d{4}-\d{2}-\d{2}_\d{4}_InProgress', folder_name)
+				]
+				name = matching[0] if len(matching) == 1 else None
+				# Unscheduled backups have no schedule-completion event.
+				active = [run for run in active if run['name'] is not None or len(run['files']) < run['count']]
+				run = {'start': ts, 'stop': None, 'name': name, 'folder': folder,
+					'count': count, 'files': set(), 'clone': [], 'check': [], 'ambiguous': False}
+				runs.append (run)
+				active.append (run)
+			elif code == '150':
+				m = stop_re.search (message)
+				if m:
+					name = m.group(1)
+					pending.pop (name, None)
+					matching = [run for run in active if run['name'] == name]
+					if len(matching) == 1:
+						matching[0]['stop'] = ts
+						active.remove (matching[0])
+			elif code in ('460', '758', '639', '720') or ' on backup of database "' in message:
+				file_match = file_re.search (message)
+				result_match = result_re.search (message)
+				if not file_match and not result_match:
+					continue
+				if len(active) != 1:
+					for run in active:
+						run['ambiguous'] = True
+					continue
+				run = active[0]
+				if file_match:
+					run['files'].add (file_match.group(1))
+				if result_match:
+					key = 'clone' if result_match.group(1) == 'Clone' else 'check'
+					run[key].append ((result_match.group(2), result_match.group(3)))
+
+	def result_summary (run, key):
+		results = run[key]
+		if not results:
+			return 'unknown' if run['ambiguous'] else 'not logged'
+		succeeded = sum (result == 'succeeded' for result, _ in results)
+		failed = [name for result, name in results if result == 'failed']
+		parts = []
+		if succeeded:
+			parts.append (f'{succeeded} succeeded')
+		if failed:
+			parts.append ('failed: ' + ', '.join(failed))
+		if run['ambiguous']:
+			parts.append ('other results unknown')
+		return '; '.join(parts)
+
+	print (f'{"START":23}  {"DURATION":>14}  {"SCHEDULE":<20}  {"CLONES":<20}  {"CHECKS":<20}  BACKUP FOLDER')
+	for run in runs:
+		if run['stop'] is None:
+			duration = '(no stop)'
+		else:
+			hours, rem = divmod ((run['stop'] - run['start']).total_seconds(), 3600)
+			minutes, secs = divmod (rem, 60)
+			duration = f'{int(hours)}:{int(minutes):02d}:{secs:06.3f}'
+		start = f'{run["start"]:%Y-%m-%d %H:%M:%S.%f}'[:23]
+		print (f'{start}  {duration:>14}  {run["name"] or "-":<20}  '
+			f'{result_summary(run, "clone"):<20}  {result_summary(run, "check"):<20}  {run["folder"]}')
+
 #
 #	p r i n t _ f m t m p _ i n f o
 #
@@ -3697,7 +3807,7 @@ def print_head (log_name: str, count: int, header: bool, succinct: bool) -> int:
 		header_count = 0
 	
 	if TIMESTAMP_START:
-		line_num = find_first_timestamp (log_path, TIMESTAMP_START)
+		line_num = find_closest_to_timestamp (log_path, TIMESTAMP_START)
 	else:
 		if LOG_SPECS[log_name]['lghd']:
 			line_num = 2		# skip the column header row
@@ -4200,18 +4310,20 @@ def read_tail (file_path: str, lines_from_end: int) -> list:
 	Line numbers are base 1 for use with linecache.getline.
 	"""
 
-	check_file_validity (file_path)
-	line_num = 1
-	matching = []
+	if lines_from_end > 0:		
+		check_file_validity (file_path)
+		line_num = 1
+		matching = []
 
-	while True:
-		line = linecache.getline (file_path, line_num)
-		if line == '': break
-		matching.append (line_num)
-		line_num += 1
+		while True:
+			line = linecache.getline (file_path, line_num)
+			if line == '': break
+			matching.append (line_num)
+			line_num += 1
 
-	#print ('line_num:',line_num, 'matching:',len (matching))
-	return matching [-lines_from_end:]
+		#print ('line_num:',line_num, 'matching:',len (matching))
+		return matching [-lines_from_end:]
+	return []
 
 #
 #	r e a d _ t a i l _ f i l t e r e d
@@ -4256,7 +4368,7 @@ def read_tail_filtered_and_time (file_path: str, lines_from_end: int) -> list:
 	# First, find the first line containing some kind of message date
 	# that is on or after our start date.
 
-	line_num = find_first_timestamp (file_path, TIMESTAMP_START)
+	line_num = find_closest_to_timestamp (file_path, TIMESTAMP_START)
 
 	if line_num > 0:
 		# Now, filter anything after start date.
@@ -4289,7 +4401,7 @@ def read_tail_time (file_path: str, lines_from_end: int) -> list:
 	# First, find the first line containing some kind of message date
 	# that is on or after our start date.
 
-	line_num = find_first_timestamp (file_path, TIMESTAMP_START)
+	line_num = find_closest_to_timestamp (file_path, TIMESTAMP_START)
 	if line_num < 1:
 		return matching
 
@@ -4719,6 +4831,10 @@ def handle_named_options (args) -> bool:
 
 	if args.backups:
 		print_backup_info ()
+		ignore_positionals = True
+
+	if args.backup_runs:
+		print_backup_runs()
 		ignore_positionals = True
 
 	if args.begin:

@@ -59,6 +59,7 @@ positional arguments (log name):
 
 options:
   -B, --backups             list scheduled backup sets present, including total number of files and size
+  --backup-runs             report backup runs recorded in the Event log
   -b, --begin BEGIN         start at first message on or after time or time interval in BEGIN
   -C, --check-connectivity [HOST]
                             test connectivity to FMS components, optionally using HOST for only external tests
@@ -92,6 +93,20 @@ options:
   -w, --watch-path          check for changes to a file or directory every 10 seconds, logging each change as it happens
   -V, --version             version info for fmslog and FMS components
 ```
+
+---
+
+### --backup-runs
+
+Report backup starts recorded in Event.log, including their destination folder,
+duration when a matching schedule completion is logged, and observed clone and
+consistency-check results. `not logged` does not mean the operation was disabled;
+the relevant messages may be missing. Overlapping backups can make individual
+results ambiguous, in which case they are reported as unknown. An unscheduled
+backup has no schedule completion and is shown with `(no stop)`; after all its
+database results are logged, the next backup start is treated as its boundary.
+Schedules without a backup-start message cannot be identified as backup runs.
+This option scans the whole Event.log, like `--scheduled-script-runs`.
 
 ---
 

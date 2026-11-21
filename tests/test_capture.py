@@ -13,7 +13,7 @@ FUNCTIONS = [
 	if isinstance(node, ast.FunctionDef)
 	and node.name in (
 		'parse_log_timestamp', 'scan_first_timestamp',
-		'find_first_timestamp', 'write_log_to_zip',
+		'find_closest_to_timestamp', 'write_log_to_zip',
 	)
 ]
 NAMESPACE = {
